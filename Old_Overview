@@ -1,0 +1,2501 @@
+#target "InDesign"
+#include 'lib/main.js';
+#include 'lib/lib.js';
+#include 'lib/package.js';
+#include 'lib/functions.js';
+// #include 'lib/update-nav.js';
+
+
+// ---------------- MAIN ----------------
+
+// var files = File.openDialog('Select the file list');
+var scriptFolder = Folder(File($.fileName).parent.fsName);
+var files = makeFile(File($.fileName).parent.fsName, '/download.txt');
+
+if (!files) exit();
+
+var finishedLog = makeFile(File($.fileName).parent.fsName, '/finishedLog.txt');
+finishedLog.open('a');
+
+var errorLog = makeFile(File($.fileName).parent.fsName, '/filesWithErrors.txt');
+errorLog.open('a');
+
+var lines = returnSplit(files, '\n');
+
+var generateOverviewPackage = true;
+var ASMT_proceed = false
+
+if (generateOverviewPackage) {
+    betterAlert('About to run "generateOverviewPackage" on ' + lines.length + ' files. Type "exit" if you do not want to continue.')
+    linesLoop: for (var li = 0; li < lines.length; li++) {
+
+        notifications(false)
+
+        var file = lines[li];
+
+        try {
+            safe_open_READONLY(file, 'New Core 2025');
+        } catch (e) {
+            finishedLog.open('a');
+            finishedLog.write(file + '\t LAYOUT NOT FOUND \n')
+            finishedLog.close();
+            continue linesLoop;
+        }
+
+        var time = new Date();
+        if (app.documents.length === 0) {
+            try {
+
+                finishedLog.open('a');
+                finishedLog.write(file + '\t Layout not found within "New Core 2025" brand. Trying "Max Langugage". \n')
+                finishedLog.close();
+
+                safe_open_READONLY(file, 'Max Language');
+
+            } catch (e) {
+                finishedLog.open('a');
+                finishedLog.write(file + '\t LAYOUT NOT FOUND \n')
+                finishedLog.close();
+                continue linesLoop;
+            }
+        }
+
+        finishedLog.open('a');
+        finishedLog.write('[' + time + '] ' + file + ' started.\n');
+        finishedLog.close();
+        try
+        {
+        var mdDoc = app.activeDocument.entMetaData;
+        var doc = app.activeDocument;
+        } catch (e)
+        {
+          $.writeln(file)
+          continue;
+        }
+
+        var grade = null;
+        var unit = null;
+        var week = null;
+        var day = null;
+        var lessonType = null;
+        var instructional_setting = '';
+
+        try {
+            grade = mdDoc.get('C_GRADE').replace(/\s/g, '') !== '' ? mdDoc.get('C_GRADE').replace(/\s/g, '') : app.activeDocument.name.match(/G\d|GK*/)[0].replace(/G/g, '')
+        } catch (e) { }
+
+        try {
+            unit = mdDoc.get('C_PROGRAM_COMPONENT_UNIT').replace(/\D/g, '') !== '' ? mdDoc.get('C_PROGRAM_COMPONENT_UNIT').replace(/\D/g, '') : app.activeDocument.name.match(/U\d\d*/)[0].replace(/\D/g, '')
+        } catch (e) { }
+
+        try {
+            week = mdDoc.get('C_WEEK').replace(/\D/g, '') !== '' ? mdDoc.get('C_WEEK').replace(/\D/g, '') : app.activeDocument.name.match(/W\d\d*/)[0].replace(/\D/g, '')
+        } catch (e) { }
+
+        if (app.activeDocument.name.match(/_INT_/)) {
+            instructional_setting = 'Intervention';
+        } else {
+                instructional_setting = 'Whole Group';
+        }
+        grade = app.activeDocument.name.match(/_G\d|GK/).toString().replace(/G/g, '').replace(/_/g, '')
+        unit = app.activeDocument.name.match(/_U\d/).toString().replace(/_U/g, '')
+          var fileMetaData = {
+            grade: grade,
+            unit: unit,
+            week: week,
+            instructional_setting: instructional_setting,
+        }
+        fileMetaData.itrsCode = getItrsCode(fileMetaData);
+        // var navInfo = buildITRSNav(fileMetaData);
+        var mainPath = File($.fileName).parent.fsName
+        switch (instructional_setting) {
+            case 'Whole Group':
+                try
+                {
+                    lessonFolder = buildPackage('lesson', { xcode: fileMetaData.itrsCode }, fileMetaData, mainPath);
+
+                    finishedLog.open('a');
+                    finishedLog.write('Package Folder created ' + lessonFolder + '\n')
+                    finishedLog.close();
+                } catch (e) 
+                {
+                    finishedLog.open('a');
+                    finishedLog.write('Error in buildPackage ' + lessonFolder + '\n')
+                    finishedLog.close();
+                }
+
+                break;
+            case 'Small Group':
+                break;
+            case 'Intervention':
+                break;
+        }
+        // ---------------------------------------------- Knowledgepath Starts ---------------------------------------------------
+        if (doc.name.match(/_KnowledgePath/) != null && doc.name.match(/_W\d+/) == null)
+        {
+            var unitName = 'Unit ' + fileMetaData.unit + ' Overview'
+
+            var itrsLessonHTMLFullContents = {};
+            itrsLessonHTMLFullContents.itrsOpenerHTML = '<!doctype html>\n<html lang="en">\n\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + unitName + ' Tabs</title>\n<link rel="stylesheet" href="/css/bootstrap-5-3-3.css">\n<link rel="stylesheet" href="/css/fonts.css">\n<link rel="stylesheet" href="/css/styles.css">\n</head>\n<body><div class=" bec-content">\n';
+            itrsLessonHTMLFullContents.itrsOpenerHTML += '<main class="container lesson-shell overview-page overview-tabs-page" aria-label=' + unitName  + '>';
+
+            itrsLessonHTMLFullContents.itrsCoreHTML = '<section class="overview-section mb-5" aria-labelledby="kb-path-heading">\n'
+            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="overview-section-heading mb-3">\n<span class="overview-section-marker" aria-hidden="true"></span>\n<h2 id="kb-path-heading" class="mb-0">Knowledge Path</h2></div>'
+            var styleArray = ['intro_text']
+            var foundStyleText = findText(styleArray);
+            if (foundStyleText != null)
+            {
+                for (var c = 0; c < foundStyleText.length; c++)
+                {
+                    if (findPage(foundStyleText[c]).documentOffset == 0)
+                    {
+                        if (c == 0) {itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="overview-intro-copy mb-4"></div>'}
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="overview-body-text">' + foundStyleText[c] + '</p>\n'
+                        if (c == foundStyleText.length - 1) {itrsLessonHTMLFullContents.itrsCoreHTML += '</div>'}
+                    }
+                }
+            }
+            var styleArray = ['welcome_sb_title', 'welcome_sb_title_lg']
+            var welcome_sb_title = findText(styleArray)
+            var styleArray = ['welcome_body_txt']
+            var welcome_body_txt = findTextOffset(styleArray, 0)
+            var gradeLinks = findImage(lessonFolder)
+            itrsLessonHTMLFullContents.itrsCoreHTML += 
+            '<div class="unit-kb-path-scroll">\n' + 
+                '<div class="unit-kb-flow" aria-label="Knowledge path map">\n' + 
+                  '<div class="unit-kb-flow-row">\n' + 
+                    '<article class="unit-kb-flow-card">\n' + 
+                      '<img src="./images/gradek.png" alt="Grade K book cover" class="unit-kb-flow-book">\n' + 
+                      '<div class="unit-kb-flow-card-copy">\n' + 
+                        '<span class="unit-kb-flow-badge unit-kb-flow-badge-k">Grade K</span>\n' + 
+                        '<div class="unit-kb-flow-title-box">\n' + 
+                          '<h3 class="unit-kb-flow-title">' + welcome_sb_title[0].contents.normalize() + '</h3>\n' + 
+                        '</div>\n' + 
+                      '</div>\n' + 
+                    '</article>\n' + 
+                    '<div class="unit-kb-flow-arrow unit-kb-flow-arrow-right" aria-hidden="true"></div>\n' + 
+                    '<aside class="unit-kb-flow-info">' + convertTextToHTML(welcome_body_txt[0]) + '</aside>\n' + 
+                  '</div>\n' + 
+
+                  '<div class="unit-kb-flow-connector unit-kb-flow-connector-right" aria-hidden="true"></div>\n' + 
+
+                  '<div class="unit-kb-flow-row unit-kb-flow-row-reverse">\n' + 
+                    '<article class="unit-kb-flow-card">\n' + 
+                      '<img src="./images/grade1.png" alt="Grade 1 book cover" class="unit-kb-flow-book">\n' + 
+                      '<div class="unit-kb-flow-card-copy">\n' + 
+                       '<span class="unit-kb-flow-badge unit-kb-flow-badge-1">Grade 1</span>\n' + 
+                        '<div class="unit-kb-flow-title-box">\n' + 
+                          '<h3 class="unit-kb-flow-title">' + welcome_sb_title[1].contents.normalize() + '</h3>\n' + 
+                        '</div>\n' + 
+                      '</div>\n' + 
+                    '</article>\n' + 
+                    '<div class="unit-kb-flow-arrow unit-kb-flow-arrow-left" aria-hidden="true"></div>\n' + 
+                    '<aside class="unit-kb-flow-info">' + convertTextToHTML(welcome_body_txt[1]) + '</aside>\n' + 
+                  '</div>\n' + 
+
+                  '<div class="unit-kb-flow-connector unit-kb-flow-connector-left" aria-hidden="true"></div>\n' + 
+
+                  '<div class="unit-kb-flow-row">\n' + 
+                    '<article class="unit-kb-flow-card">\n' + 
+                      '<img src="./images/grade2.png" alt="Grade 2 book cover" class="unit-kb-flow-book">\n' + 
+                      '<div class="unit-kb-flow-card-copy">\n' + 
+                        '<span class="unit-kb-flow-badge unit-kb-flow-badge-2">Grade 2</span>\n' + 
+                        '<div class="unit-kb-flow-title-box">\n' + 
+                          '<h3 class="unit-kb-flow-title unit-kb-flow-title-muted">' + welcome_sb_title[2].contents.normalize() + '</h3>\n' + 
+                        '</div>\n' + 
+                      '</div>\n' + 
+                    '</article>\n' + 
+                    '<div class="unit-kb-flow-arrow unit-kb-flow-arrow-right" aria-hidden="true"></div>\n' + 
+                    '<aside class="unit-kb-flow-info">' + convertTextToHTML(welcome_body_txt[2]) + '</aside>\n' + 
+                  '</div>\n' + 
+
+                  '<div class="unit-kb-flow-connector unit-kb-flow-connector-right" aria-hidden="true"></div>\n' + 
+
+                  '<div class="unit-kb-flow-row unit-kb-flow-row-reverse">\n' + 
+                    '<article class="unit-kb-flow-card">\n' + 
+                      '<img src="./images/grade3.png" alt="Grade 3 book cover" class="unit-kb-flow-book">\n' + 
+                      '<div class="unit-kb-flow-card-copy">\n' + 
+                        '<span class="unit-kb-flow-badge unit-kb-flow-badge-3">Grade 3</span>\n' + 
+                        '<div class="unit-kb-flow-title-box">\n' + 
+                          '<h3 class="unit-kb-flow-title unit-kb-flow-title-muted">' + welcome_sb_title[3].contents.normalize() + '</h3>\n' + 
+                        '</div>\n' + 
+                      '</div>\n' + 
+                    '</article>\n' + 
+                    '<div class="unit-kb-flow-arrow unit-kb-flow-arrow-left" aria-hidden="true"></div>\n' + 
+                    '<aside class="unit-kb-flow-info">' + convertTextToHTML(welcome_body_txt[3]) + '</aside>\n' + 
+                  '</div>\n' + 
+
+                  '<div class="unit-kb-flow-connector unit-kb-flow-connector-left unit-kb-flow-connector-to-g4" aria-hidden="true"></div>\n' + 
+
+                  '<div class="unit-kb-flow-row">\n' + 
+                    '<article class="unit-kb-flow-card">\n' + 
+                      '<img src="./images/grade4.png" alt="Grade 4 book cover" class="unit-kb-flow-book">\n' + 
+                      '<div class="unit-kb-flow-card-copy">\n' + 
+                        '<span class="unit-kb-flow-badge unit-kb-flow-badge-4">Grade 4</span>\n' + 
+                        '<div class="unit-kb-flow-title-box">\n' + 
+                          '<h3 class="unit-kb-flow-title unit-kb-flow-title-muted">' + welcome_sb_title[4].contents.normalize() + '</h3>\n' + 
+                          '<a class="unit-trade-link unit-kb-flow-pill-link" href="#unit-kb-essential-modal" aria-label="Essential Question"><img class="unit-trade-link-icon unit-trade-link-icon-image" src="./fonts/copy.svg" alt="" aria-hidden="true">Essential Question</a>\n' +
+                        '</div>\n' + 
+                      '</div>\n' + 
+                    '</article>\n' + 
+                    '<div class="unit-kb-flow-arrow unit-kb-flow-arrow-right" aria-hidden="true"></div>\n' + 
+                    '<aside class="unit-kb-flow-info">' + convertTextToHTML(welcome_body_txt[4]) + '</aside>\n' + 
+                  '</div>\n' + 
+
+                  '<div class="unit-kb-flow-connector unit-kb-flow-connector-right" aria-hidden="true"></div>\n' + 
+
+                  '<div class="unit-kb-flow-row unit-kb-flow-row-reverse unit-kb-flow-row-last">\n' + 
+                    '<article class="unit-kb-flow-card">\n' + 
+                      '<img src="./images/grade5.png" alt="Grade 5 book cover" class="unit-kb-flow-book">\n' + 
+                      '<div class="unit-kb-flow-card-copy">\n' + 
+                        '<span class="unit-kb-flow-badge unit-kb-flow-badge-5">Grade 5</span>\n' + 
+                        '<div class="unit-kb-flow-title-box">\n' + 
+                          '<h3 class="unit-kb-flow-title unit-kb-flow-title-muted">' + welcome_sb_title[5].contents.normalize() + '</h3>\n' + 
+                        '</div>\n' + 
+                      '</div>\n' + 
+                    '</article>\n' + 
+                    '<div class="unit-kb-flow-spacer" aria-hidden="true"></div>\n' + 
+                    '<div class="unit-kb-flow-info unit-kb-flow-info-hidden" aria-hidden="true"></div>\n' + 
+                  '</div>\n' + 
+                '</div>\n' + 
+              '</div>\n';
+
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="unit-kb-modal css-modal" id="unit-kb-essential-modal" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="unit-kb-essential-modal-title">\n' +
+              '<a class="unit-kb-modal-backdrop css-modal-backdrop" href="#kb-path-heading" aria-label="Close modal"></a>\n' + 
+                '<div class="unit-kb-modal-dialog css-modal-dialog" role="document">\n' +
+                  '<div class="eq-modal-container">\n' +
+                    '<div class="eq-header-section">\n' +
+                      '<h1 class="eq-main-title" id="unit-kb-essential-modal-title">Essential Question</h1>\n' + 
+                      '<a class="unit-kb-modal-close css-modal-close" href="#kb-path-heading" aria-label="Close modal">&times;</a>\n' +
+                    '</div>\n'
+              var styleArray = ['intro_text']
+              var foundStyleText = findTextOffset(styleArray, 1);
+              if (foundStyleText != null)
+              {
+                  for (var c = 0; c < foundStyleText.length; c++)
+                  {
+                    for (var p = 0; p < foundStyleText[c].paragraphs.length; p++)
+                    {
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="eq-intro-para">' + convertTextToHTML(foundStyleText[c].paragraphs[p].texts[0]) + '</p>\n'
+                    }
+                    // itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="eq-intro-para">' + convertTextToHTML(foundStyleText[c]) + '</p>\n'
+                  }
+              }
+
+              var styleArray = ['welcome_eq_b']
+              var foundStyleText = findText(styleArray);
+              if (foundStyleText != null)
+              {
+                  for (var c = 0; c < foundStyleText.length; c++)
+                  {
+                      if (findPage(foundStyleText[c]).documentOffset == 1)
+                      {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="eq-highlight-card">\n' + '<h2 class="eq-highlight-heading">' + foundStyleText[c].contents.normalize() + '</h2>\n</div>\n'
+                      }
+                  }
+              }
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="eq-goals-row">'
+              var styleArray = ['welcome_goal_hd']
+              var foundStyleText = findTextOffset(styleArray, 1);
+
+              if (foundStyleText != null)
+              {
+                  for (var c = 0; c < foundStyleText.length; c++)
+                  {
+                      if (findPage(foundStyleText[c]).documentOffset == 1)
+                      {
+                        if (foundStyleText[c].contents.match('Enduring Understanding'))
+                        {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="eq-bottom-alignment">\n<div class="eq-enduring-card">';
+                        }
+                        else
+                        {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="eq-goal-col">\n<div class="eq-goal-item">';
+                        }
+                        for (var t = 0; t < foundStyleText[c].parent.paragraphs.length; t++)
+                        {
+                          if (foundStyleText[c].parent.paragraphs[t].appliedParagraphStyle.name == 'welcome_goal_hd')
+                          {
+                            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="eq-goal-name">' + foundStyleText[c].parent.paragraphs[t].contents.normalize() + '</div>'
+                          }
+                          else if (foundStyleText[c].parent.paragraphs[t].appliedParagraphStyle.name == 'welcome_body_txt')
+                          {
+                            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="eq-goal-text">' + foundStyleText[c].parent.paragraphs[t].contents.normalize() + '</div>'
+                          }
+                        }
+                        if (c == foundStyleText.length - 1)
+                        {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '</div>';     
+                        }
+                        else if ((c+1) == foundStyleText.length - 1)
+                        {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n<div class="eq-down-arrow-box"><span class="eq-chevron eq-chevron-down"></span></div>\n</div>\n</div>\n';
+                        }
+                        else{
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n</div>\n<div class="eq-chevron-spacer"><span class="eq-chevron eq-chevron-right"></span></div>';
+                        }
+                    }
+                  }
+              }
+            itrsLessonHTMLFullContents.itrsCoreHTML += '</div></div></div></section>'
+            itrsLessonHTMLFullContents.itrsClosingHTML = '\n  </main>\n <script src="/js/bootstrap.bundle.min.js"></script>\n  <script src="/js/script.js"></script>\n<script src="/js/trs-communication-channel.js"></script>\n<script>\n(function () {\n  function applyStrandColor() {\n    var body = document.body;\n    if (!body) return;\n\n    var className = body.className || \'\';\n    var strand = null;\n\n    // Determine strand from body class\n    if (className.indexOf(\'strand-reading\') !== -1) {\n      strand = \'reading\';\n    } else if (className.indexOf(\'strand-phonics\') !== -1) {\n      strand = \'phonics\';\n    } else if (className.indexOf(\'strand-writing\') !== -1) {\n      strand = \'writing\';\n    }\n\n    if (!strand) return;\n\n    // Build CSS variable reference\n    var cssVar = \'var(--color-\' + strand + \'-rgb)\';\n\n    // Apply to :root\n    document.documentElement.style.setProperty(\'--strand-rgb\', cssVar);\n  }\n\n  // Run on page load\n  if (document.readyState === \'loading\') {\n    document.addEventListener(\'DOMContentLoaded\', applyStrandColor);\n  } else {\n    applyStrandColor();\n  }\n})();\n</script>\n\n</body>\n\n</html>'
+
+            var htmlFolder = Folder(lessonFolder + '/html');
+            if (!htmlFolder.exists) htmlFolder.create();
+            // var fileName = unitName + '_' + 'G' + fileMetaData.grade + '_' + doc.name.replace(/^.*_U\d+_/, '').replace('.indd', '') + '.html';
+            var fileName = 'unit-overview-knowledge-path' + '.html';
+            fileName = fileName.replace(/\s+/, '_').replace(/\s+/, '_');
+            var itrsOutputFile = makeFile(htmlFolder.fsName + '/', fileName);
+
+            itrsOutputFile.open('w');
+            itrsOutputFile.write(
+                itrsLessonHTMLFullContents.itrsOpenerHTML +
+                itrsLessonHTMLFullContents.itrsCoreHTML + 
+                itrsLessonHTMLFullContents.itrsClosingHTML
+            )
+
+
+            itrsOutputFile.close();
+
+        }
+
+        // ------------------------------------------------- Knowledgepath Ends ------------------------------------------------------
+
+        // ------------------------------------------------- Concepts to Know Starts -------------------------------------------------
+        else if (doc.name.match(/_ConceptsToKnow/) != null && doc.name.match(/_W\d+/) == null)
+        {
+            var unitName = 'Unit ' + fileMetaData.unit + ' Overview'
+
+            var itrsLessonHTMLFullContents = {};
+            itrsLessonHTMLFullContents.itrsOpenerHTML = '<!doctype html>\n<html lang="en">\n\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + unitName + ' Tabs</title>\n<link rel="stylesheet" href="/css/bootstrap-5-3-3.css">\n<link rel="stylesheet" href="/css/fonts.css">\n<link rel="stylesheet" href="/css/styles.css">\n<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">\n</head>\n<body><div class=" bec-content">\n';
+            itrsLessonHTMLFullContents.itrsOpenerHTML += '<main class="container lesson-shell overview-page overview-tabs-page" aria-label=' + unitName  + '>';
+
+            itrsLessonHTMLFullContents.itrsCoreHTML = '<section class="overview-section" aria-labelledby="kb-concepts-heading">\n'
+            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="overview-section-heading mb-3">\n<span class="overview-section-marker" aria-hidden="true"></span>\n<h2 id="kb-concepts-heading" class="mb-0">Concepts To Know</h2></div>'
+            var styleArray = ['b-hd']
+            var foundStyleText = findText(styleArray);
+            if (foundStyleText != null)
+            {
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="overview-subheading mb-3">' + foundStyleText[0].contents.normalize() + '</h3>\n'; 
+            }
+            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="table-responsive-xl overview-table-wrap unit-kb-terms-wrap mb-4">\n';
+            var styleArray = ['intro_text']
+            var foundStyleText = findTextOffset(styleArray, 0);
+            if (foundStyleText != null)
+            {
+              itrsLessonHTMLFullContents.itrsCoreHTML += 
+              '<p class="overview-body-text mb-4">' + convertTextToHTML(foundStyleText[0]) + '</p>\n'; 
+            }
+
+            var styleArray = ['concepts_term', 'concept_table_body-txt']
+            var findTable = app.activeDocument.pages[0].textFrames.everyItem().getElements();
+            var foundTable = null
+            for (var t = 0; t < findTable.length; t++)
+            {
+              if (findTable[t].tables.length > 0)
+              {
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<table class="table table-bordered align-middle overview-table unit-kb-terms-table">\n' + 
+                '<tbody>\n'
+
+                for (var z = 0; z < findTable[t].tables.length; z++)
+                {
+                  if (findTable[t].tables[z].rows[0].cells[0].texts[0].appliedParagraphStyle.name == 'concepts_term' || findTable[t].tables[z].rows[0].cells[0].texts[0].appliedParagraphStyle.name == 'concept_table_body-txt')
+                  {
+                    var foundTable = findTable[t].tables[z];
+                    break;
+                  }
+                  if (foundTable != null)
+                  {
+                    break;
+                  }
+                }
+              }
+              if (foundTable != null)
+              {
+                break;
+              }
+            }
+            if (foundTable != null)
+            {
+                var rowPatterns = [];
+                var maxCells = 0;
+                
+                for (var c = 0; c < foundTable.rows.length; c++)
+                {
+                    var pattern = [];
+                    for (var e = 0; e < foundTable.rows[c].cells.length; e++)
+                    {
+                        if (foundTable.rows[c].cells[e].contents.toString().match(/[a-z]+/i) != null)
+                        {
+                            var style = foundTable.rows[c].cells[e].texts[0].appliedParagraphStyle.name;
+                            pattern.push({
+                                type: style == 'concepts_term' ? 'th' : 'td',
+                                content: foundTable.rows[c].cells[e].texts[0].contents.normalize()
+                            });
+                        }
+                    }
+                    rowPatterns.push(pattern);
+                    if (pattern.length > maxCells) {
+                        maxCells = pattern.length;
+                    }
+                }
+                
+                for (var c = 0; c < rowPatterns.length; c++)
+                {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<tr>';
+                    
+                    for (var e = 0; e < rowPatterns[c].length; e++)
+                    {
+                        var cell = rowPatterns[c][e];
+                        if (cell.type == 'th') {
+                            itrsLessonHTMLFullContents.itrsCoreHTML += '<th scope="row">' + cell.content + '</th>\n';
+                        } else {
+                            itrsLessonHTMLFullContents.itrsCoreHTML += '<td>' + cell.content + '</td>';
+                        }
+                    }
+                    
+                    for (var i = rowPatterns[c].length; i < maxCells; i++)
+                    {
+                        if (i % 2 == 0) {
+                            itrsLessonHTMLFullContents.itrsCoreHTML += '<th scope="row"></th>';
+                        } else {
+                            itrsLessonHTMLFullContents.itrsCoreHTML += '<td></td>';
+                        }
+                    }
+                    
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '</tr>';
+                }
+                
+                itrsLessonHTMLFullContents.itrsCoreHTML += '</tbody>';
+                itrsLessonHTMLFullContents.itrsCoreHTML += '</table>';
+            }
+            itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n'
+
+            // -------------------------------------------- Essential Question -------------------------------------------
+            var styleArray = ['welcome_eq_a', 'welcome_eq_b']
+            var foundStyleText = findText(styleArray);
+            if (foundStyleText != null)
+            {
+                for (var c = 0; c < foundStyleText.length; c++)
+                {
+                    if (findPage(foundStyleText[c]).documentOffset == 0)
+                    {
+                      if (foundStyleText[c].texts[0].appliedParagraphStyle.name == 'welcome_eq_a')
+                      {
+                        var essentialQuestion = foundStyleText[c].texts[0]
+                      }
+                      else if (foundStyleText[c].texts[0].appliedParagraphStyle.name == 'welcome_eq_b')
+                      {
+                        var essentialText = foundStyleText[c].texts[0]
+                      }
+                    }
+                }
+            }
+            for (var i = 0; i < app.activeDocument.links.length; i++)
+            {
+              if (app.activeDocument.links[i].parent.constructor.name != 'Story')
+              {
+                if (findPage(app.activeDocument.links[i]).documentOffset == 1)
+                {
+                  var essentialImage = app.activeDocument.links[i]
+                  try
+                  {
+                    var myessentialImages = essentialImage.parent.exportAs('png', 'max', 300, lessonFolder + '/images/' + essentialImage.name.split('.')[0] + '.png')
+                  } catch (e)
+                  {
+                    var myessentialImages = essentialImage.exportAs('png', 'max', 300, lessonFolder + '/images/' + essentialImage.name.split('.')[0] + '.png')
+                  }
+                  break;
+                }
+              }
+            }
+            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="unit-kb-essential mb-4">\n' +
+            '<div class="unit-kb-essential-copy">\n' + 
+            '<h3 class="overview-subheading mb-2">' + essentialQuestion.contents.normalize() + '</h3>' + 
+            '<p class="unit-kb-essential-question mb-0">' + essentialText.contents.normalize() + '</p>';
+            
+            if (essentialImage.isValid)
+            {
+              itrsLessonHTMLFullContents.itrsCoreHTML += '</div><img class="unit-kb-essential-image" src=' + '"' + './images/' + essentialImage.name.split('.')[0] + '.png' + '"' + 'alt=' + '"' + essentialText.contents.normalize() + '"' +'>\n';
+            }
+            else 
+            {
+              itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n';
+            }
+            itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n' + 
+            '<div class="unit-kb-weeks-grid">\n'
+
+          app.findGrepPreferences = app.changeGrepPreferences = null;
+          app.findChangeGrepOptions.includeMasterPages = false;
+          app.findChangeGrepOptions.includeLockedStoriesForFind = true;
+          app.findChangeGrepOptions.includeLockedLayersForFind = true;
+          app.findGrepPreferences.appliedParagraphStyle = app.activeDocument.paragraphStyles.itemByName('concepts_b_hd')
+          var found = app.activeDocument.findGrep();
+          if (found.length > 0)
+          {
+              for (var f = 0; f < found.length; f++)
+              {
+                
+                var start = found[f].paragraphs[0].insertionPoints[0];
+                if (f == found.length - 1)
+                {
+                    var end = found[f].parent.insertionPoints[-1];
+                }
+                else
+                {
+                    var end = found[f+1].paragraphs[0].insertionPoints[0];
+                }
+                app.select(null);
+                start.select();
+                end.select(SelectionOptions.ADD_TO);
+                // var weekStyleArray = ['concepts_b_hd', 'concepts_c_hd', 'welcome_list-bullets']
+                var found1 = app.selection[0].paragraphs
+                // for (var s = 0; s < weekStyleArray.length; s++)
+                // {
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="unit-kb-week-card">'
+                var b = false;
+                var n = false;
+                var w = false;
+                for (var f1 = 0; f1 < found1.length; f1++)
+                {
+                  if (found1[f1].contents.length > 1)
+                  {
+                    
+                    // app.findGrepPreferences = app.changeGrepPreferences = null;
+                    // app.findChangeGrepOptions.includeMasterPages = false;
+                    // app.findChangeGrepOptions.includeLockedStoriesForFind = true;
+                    // app.findChangeGrepOptions.includeLockedLayersForFind = true;
+                    // app.findGrepPreferences.appliedParagraphStyle = app.activeDocument.paragraphStyles.itemByName(weekStyleArray[s])
+                    // var found1 = app.selection[0].findGrep();
+                        var tables = found1[f1].texts[0].tables;
+                        if (tables.length > 0)
+                        {
+                            for (var t = 0; t < tables.length; t++)
+                            {
+                                var table = tables[t];
+
+                                itrsLessonHTMLFullContents.itrsCoreHTML += '<table class="table table-bordered" style="margin-top:20px;">\n';
+
+                                for (var r = 0; r < table.rows.length; r++)
+                                {
+                                    itrsLessonHTMLFullContents.itrsCoreHTML += '<tr>\n';
+
+                                    for (var c = 0; c < table.rows[r].cells.length; c++)
+                                    {
+                                        var cellText = table.rows[r].cells[c].texts[0].contents.replace(/\r/g,' ');
+                                        
+                                        itrsLessonHTMLFullContents.itrsCoreHTML += '<td>' + cellText + '</td>\n';
+                                    }
+
+                                    itrsLessonHTMLFullContents.itrsCoreHTML += '</tr>\n';
+                                }
+
+                                itrsLessonHTMLFullContents.itrsCoreHTML += '</table>\n';
+                            }
+                        }
+                      else if (found1[f1].texts[0].appliedParagraphStyle.name == 'concepts_b_hd' && w == false)
+                      {
+                        if (found1[f1].texts[0].textStyleRanges[0].appliedParagraphStyle.name == 'concepts_b_hd')
+                        {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="overview-subheading mb-2">' + found1[f1].texts[0].textStyleRanges[0].contents.replace('\r', ' ') + '</h3>\n';
+                          w = true
+                        }
+                      }
+                      else if (found1[f1].texts[0].appliedParagraphStyle.name == 'concepts_c_hd')
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="unit-kb-week-goal mb-2">' + found1[f1].texts[0].contents.normalize() + '</p>\n'
+                      }
+                      else if (found1[f1].texts[0].appliedParagraphStyle.name == 'welcome_list-bullets')
+                      {
+                        if (b == false)
+                        {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '<ul class="overview-topic-list mb-0">';
+                          b = true;
+                        }
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<li>' + convertTextToHTML(found1[f1].texts[0]) + '</li>\n'
+                        try
+                        {
+                          if (found1[f1+1].texts[0].appliedParagraphStyle.name != 'welcome_list-bullets' && n == false)
+                          {
+                            itrsLessonHTMLFullContents.itrsCoreHTML += '</ul>\n';
+                            n = true;
+                          }
+                        } catch (e) 
+                        {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '</ul>\n';
+                          n = true;
+                        }
+                      }
+                    }
+                  }
+                  itrsLessonHTMLFullContents.itrsCoreHTML += '</article>\n'
+              }
+          }
+          itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n'
+          // '</section>\n'
+
+            itrsLessonHTMLFullContents.itrsClosingHTML = '</div>\n </section>\n  </main>\n <script src="/js/bootstrap.bundle.min.js"></script>\n  <script src="/js/script.js"></script>\n<script src="/js/trs-communication-channel.js"></script>\n<script>\n(function () {\n  function applyStrandColor() {\n    var body = document.body;\n    if (!body) return;\n\n    var className = body.className || \'\';\n    var strand = null;\n\n    // Determine strand from body class\n    if (className.indexOf(\'strand-reading\') !== -1) {\n      strand = \'reading\';\n    } else if (className.indexOf(\'strand-phonics\') !== -1) {\n      strand = \'phonics\';\n    } else if (className.indexOf(\'strand-writing\') !== -1) {\n      strand = \'writing\';\n    }\n\n    if (!strand) return;\n\n    // Build CSS variable reference\n    var cssVar = \'var(--color-\' + strand + \'-rgb)\';\n\n    // Apply to :root\n    document.documentElement.style.setProperty(\'--strand-rgb\', cssVar);\n  }\n\n  // Run on page load\n  if (document.readyState === \'loading\') {\n    document.addEventListener(\'DOMContentLoaded\', applyStrandColor);\n  } else {\n    applyStrandColor();\n  }\n})();\n</script>\n\n</body>\n\n</html>'
+            var htmlFolder = Folder(lessonFolder + '/html');
+            if (!htmlFolder.exists) htmlFolder.create();
+            // var fileName = unitName + '_' + doc.name.replace(/^.*_U\d+_/, '').replace('.indd', '') + '.html';
+            var fileName = 'unit-overview-concepts-to-know' + '.html';
+            var itrsOutputFile = makeFile(htmlFolder.fsName + '/', fileName);
+
+            itrsOutputFile.open('w');
+            itrsOutputFile.write(
+                itrsLessonHTMLFullContents.itrsOpenerHTML +
+                itrsLessonHTMLFullContents.itrsCoreHTML + 
+                itrsLessonHTMLFullContents.itrsClosingHTML
+            )
+            itrsOutputFile.close();
+        }
+        // ------------------------------------------------- Concepts to Know Ends ------------------------------------------------
+
+        // ---------------------------------------------------------- ELA Starts --------------------------------------------------
+        else if (doc.name.match(/_U\d+_ELA/) != null && doc.name.match(/_W\d+/) == null)
+        {
+          app.findGrepPreferences = app.changeGrepPreferences = null;
+          app.findChangeGrepOptions.includeMasterPages = false;
+          app.findChangeGrepOptions.includeLockedStoriesForFind = true;
+          app.findChangeGrepOptions.includeLockedLayersForFind = true;
+          app.findGrepPreferences.findWhat = '\n'
+          app.changeGrepPreferences.changeTo = ' '
+          app.activeDocument.findGrep();
+          app.activeDocument.changeGrep();
+          app.findGrepPreferences = app.changeGrepPreferences = null;
+
+            var unitName = 'Unit ' + fileMetaData.unit + ' Overview'
+
+            var itrsLessonHTMLFullContents = {};
+            itrsLessonHTMLFullContents.itrsOpenerHTML = '<!doctype html>\n<html lang="en">\n\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + unitName + ' Tabs</title>\n<link rel="stylesheet" href="/css/bootstrap-5-3-3.css">\n<link rel="stylesheet" href="/css/fonts.css">\n<link rel="stylesheet" href="/css/styles.css">\n<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">\n</head>\n<body><div class="bec-content">\n';
+            itrsLessonHTMLFullContents.itrsOpenerHTML += '<main class="container lesson-shell overview-page overview-tabs-page" aria-label=' +'"' + unitName  + '"' + '>\n';
+
+            itrsLessonHTMLFullContents.itrsCoreHTML = '<section class="overview-section mb-5" aria-labelledby="collab-core-heading">\n'
+            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="overview-section-heading mb-3">\n<span class="overview-section-marker" aria-hidden="true"></span>\n<h2 id="collab-core-heading" class="mb-0">ELA and Content Learning Outcomes</h2></div>\n'
+            var styleArray = ['intro_text']
+            var foundStyleText = findTextOffset(styleArray, 0);
+            if (foundStyleText != null)
+            {
+              itrsLessonHTMLFullContents.itrsCoreHTML += 
+              '<p class="overview-body-text mb-4">' + convertTextToHTML(foundStyleText[0]) + '</p>\n'; 
+            }
+            var styleArray = ['b-hd']
+            var foundStyleText = findText(styleArray);
+            if (foundStyleText && foundStyleText.length > 0) {
+                foundStyleText.sort(function(a, b) {
+                    var pageA = findPage(a);
+                    var pageB = findPage(b);
+                    
+                    if (!pageA && !pageB) return 0;
+                    if (!pageA) return 1;
+                    if (!pageB) return -1;
+                    
+                    return pageA.documentOffset - pageB.documentOffset;
+                });
+            }
+            if (foundStyleText[0].contents.match('Foundational Literacy'))
+            {
+              itrsLessonHTMLFullContents.itrsCoreHTML +=  '<section class="lo-block lo-block-black mb-5" aria-labelledby="lo-content-heading">\n';
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 id="lo-content-heading" class="overview-subheading mb-2">' + convertTextToHTML(foundStyleText[0].texts[0]) + '</h3>\n';
+
+              var sideStyleArray = ['outcomes_table_body-txt']
+              var sideStyle = findTextOffset(sideStyleArray, 0);
+              try
+              {
+                if (sideStyle[0] != null)
+                {
+                  itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="lo-meta">' + convertCellToHTML(sideStyle[0].texts[0]) + '</p>\n '
+                }
+              } catch (e) 
+              {
+                app.findGrepPreferences = app.changeGrepPreferences = null;
+                app.findChangeGrepOptions.includeMasterPages = false;
+                app.findChangeGrepOptions.includeLockedStoriesForFind = true;
+                app.findChangeGrepOptions.includeLockedLayersForFind = true;
+                app.findGrepPreferences.findWhat = '^Assessments'
+                var found = app.activeDocument.findGrep();
+                if (found.length > 0)
+                {
+                  itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="lo-meta">' + convertTextToHTML(found[0].texts[0]) + '</p>\n '
+                }
+              }
+
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="table-responsive-xl overview-table-wrap">\n';
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<table class="table table-bordered align-middle overview-table lo-table lo-table-black" style="margin-top:20px;">\n<tbody>\n';
+
+              for (var d = 0; d < app.activeDocument.spreads[0].allPageItems.length; d++)
+              {
+                if (app.activeDocument.spreads[0].allPageItems[d].constructor.name == 'TextFrame')
+                {
+                  if (app.activeDocument.spreads[0].allPageItems[d].tables.length == 1)
+                  {
+                    var firstTable = app.activeDocument.spreads[0].allPageItems[d].tables[0];
+                    break;
+                  }
+                }
+              }
+
+              for (var r = 0; r < firstTable.rows.length; r++)
+              {
+                var ck_table = firstTable.rows[r];
+                for (var t = 0; t < ck_table.cells.length; t++)
+                {
+                  if (ck_table.cells[t].texts[0].contents.length > 0)
+                  {
+                    if (ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_b-hd')
+                    {
+                      if (t == 0)
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<tr class="lo-section-row">\n'
+                      }
+                      if (ck_table.cells[t].texts[0].contents.length > 0 && t < ck_table.cells.length - 1)
+                      {
+                      // try
+                      // {
+                      //   app.select(null);
+                      //   app.select(ck_table.cells[t]);
+                      //   app.selection[0].unmerge();
+                      //   var row_span = app.selection[0].cells.length;
+                      //   app.selection[0].merge();
+                      // } catch (e) {}
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<td rowspan="' + row_span + '">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td>\n';
+                      }
+                      else if (ck_table.cells[t].texts[0].contents.length > 1 && t == ck_table.cells.length - 1)
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<td>' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td></tr>\n';
+                      }
+                    }
+                    else if (ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name != 'outcomes_table_b-hd')
+                    {
+                      try
+                      {
+                        app.select(null);
+                        app.select(ck_table.cells[t]);
+                        app.selection[0].unmerge();
+                        var row_span = app.selection[0].cells.length;
+                        app.selection[0].merge();
+                      } catch (e) {}
+                      if (t == 0)
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<tr>\n'
+                      }
+                      if (ck_table.cells[t].texts[0].contents.length > 0 && t < ck_table.cells.length - 1)
+                      {
+                        if (t == 0 && ck_table.cells[t].columns[0].index == 0)
+                        {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '<td rowspan="' + row_span + '">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td>\n';
+                        }
+                        else
+                        {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '<td rowspan="' + row_span + '"  class="no-left-border">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td>\n';
+                        }
+                      }
+                      else if (ck_table.cells[t].texts[0].contents.length > 1 && t == ck_table.cells.length - 1)
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<td rowspan="' + row_span + '"  class="no-left-border">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td></tr>\n';
+                      }
+                    }
+                  }
+                }
+              }
+              itrsLessonHTMLFullContents.itrsCoreHTML += '</tbody></table>'
+            }
+
+            for (var h = 0; h < foundStyleText.length; h++)
+            {
+                if (foundStyleText[h].contents.match(/continued/) == null && foundStyleText[h].texts[0].appliedParagraphStyle.name == 'b-hd')
+                {
+                  if (foundStyleText[h].contents.match(/Content Knowledge/i) != null)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML +=  '<section class="lo-block lo-block-black mb-5" aria-labelledby="lo-content-heading">\n' +
+                    '<div class="lo-header-row">\n' + 
+                    '<div>\n';
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 id="lo-content-heading" class="overview-subheading mb-2">' + convertTextToHTML(foundStyleText[h].texts[0]) + '</h3>\n';
+                  }
+                  else if (foundStyleText[h].contents.match(/Read to Build Knowledge/i) != null)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<section class="lo-block lo-block-purple mb-5" aria-labelledby="lo-read-heading">\n' +
+                    '<div class="lo-header-row">\n' + 
+                    '<div>\n';
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 id="lo-read-heading" class="overview-subheading mb-2">' + convertTextToHTML(foundStyleText[h].texts[0]) + '</h3>\n';
+                  }
+                  else if (foundStyleText[h].contents.match(/Write to Build Understanding/i) != null)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<section class="lo-block lo-block-teal mb-5" aria-labelledby="lo-write-heading">\n' +
+                    '<div class="lo-header-row">\n' + 
+                    '<div>\n';
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 id="lo-write-heading" class="overview-subheading mb-2">' + convertTextToHTML(foundStyleText[h].texts[0]) + '</h3>\n';
+                  }
+                  else if (foundStyleText[h].contents.match(/Word Study, Fluency & Morphology/i) != null)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<section class="lo-block lo-block-green mb-5" aria-labelledby="lo-found-heading">\n' +
+                    '<div class="lo-header-row">\n' + 
+                    '<div>\n';
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 id="lo-found-heading" class="overview-subheading mb-2">' + convertTextToHTML(foundStyleText[h].texts[0]) + '</h3>\n';
+                  }
+                  else if (foundStyleText[h].contents.match(/Explicitly Taught Vocabulary/i) != null)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<section class="lo-block lo-block-green mb-5" aria-labelledby="lo-found-heading">\n' +
+                    '<div class="lo-header-row">\n' + 
+                    '<div>\n';
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 id="lo-found-heading" class="overview-subheading mb-2">' + convertTextToHTML(foundStyleText[h].texts[0]) + '</h3>\n';
+                  }
+                  if (foundStyleText[h].texts[0].parent.constructor.name == 'Cell')
+                  {
+                    for (var z = 0; z < foundStyleText[h].texts[0].parent.texts[0].paragraphs.length; z++)
+                    {
+                      if (foundStyleText[h].texts[0].parent.texts[0].paragraphs[z].texts[0].appliedParagraphStyle.name == 'outcomes_table_body-txt_10pt' || foundStyleText[h].texts[0].parent.texts[0].paragraphs[z].texts[0].appliedParagraphStyle.name == 'outcomes_table_body-txt')
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="lo-meta">' + convertTextToHTML(foundStyleText[h].texts[0].parent.texts[0].paragraphs[z].texts[0]) + '</p>\n '
+                      }
+                    }
+                  }
+                  if (foundStyleText[h].contents.match(/Foundational Literacy/i) != null)
+                  {
+                  }
+                  else if (foundStyleText[h].contents.match(/Content Knowledge/i) != null || foundStyleText[h].contents.match(/Write to Build Understanding/i) != null || foundStyleText[h].contents.match(/Word Study, Fluency & Morphology/i) != null)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n' +
+                      '<div class="lo-legend" aria-label="Legend">\n' +
+                      '<div class="lo-legend-item"><span class="lo-marker lo-marker-fill" aria-hidden="true"></span>First introduction of standard</div>\n' +
+                      '<div class="lo-legend-item"><span class="lo-marker lo-marker-outline" aria-hidden="true"></span>Previously taught standard</div>\n' +
+                      '<div class="lo-legend-item"><span class="lo-marker lo-marker-assessed" aria-hidden="true"></span>Assessed at end of unit</div>\n</div>\n</div>\n'
+                  }
+                  else if (foundStyleText[h].contents.match(/Foundational Literacy/i) != null)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n'
+                  }
+
+                  itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="table-responsive-xl overview-table-wrap">\n';
+                  // itrsLessonHTMLFullContents.itrsCoreHTML += '<table class="table table-bordered align-middle overview-table lo-table lo-table-purple" style="margin-top:20px">\n<tbody>\n'
+                  if (foundStyleText[h].contents.match(/Content Knowledge/i) != null)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<table class="table table-bordered align-middle overview-table lo-table lo-table-black">\n<tbody>\n';
+                  }
+                  else if (foundStyleText[h].contents.match(/Read to Build Knowledge/i) != null)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<table class="table table-bordered align-middle overview-table lo-table lo-table-purple" style="margin-top:20px;">\n<tbody>\n';
+                  }
+                  else if (foundStyleText[h].contents.match(/Write to Build Understanding/i) != null)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<table class="table table-bordered align-middle overview-table lo-table lo-table-teal" style="margin-top:20px;">\n<tbody>\n';
+                  }
+                  else if (foundStyleText[h].contents.match(/Word Study, Fluency & Morphology/i) != null)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<table class="table table-bordered align-middle overview-table lo-table lo-table-green">\n<tbody>\n';
+                  }
+                  else if (foundStyleText[h].contents.match(/Explicitly Taught Vocabulary/i) != null)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<table class="table table-bordered align-middle overview-table">\n<tbody>\n';
+                  }
+
+                  var styleContArray = ['b-hd']
+                  var contStyleText = findText(styleContArray);
+                  // $.writeln(foundStyleText[h].contents.toString())
+                  var contTable = null;
+                  for (var r = 0; r < contStyleText.length; r++)
+                  {
+                    if (contStyleText[r].contents.match(/continued/) != null && contStyleText[r].paragraphs[0].contents.toString().match(foundStyleText[h].contents.toString().replace('\r', '')))
+                    {
+                      if (contStyleText[r].texts[0].parent.parent.constructor.name == 'Table')
+                      {
+                        var contTable = contStyleText[r].texts[0].parent.parent;
+                      }
+                    }
+                  }
+                  if (foundStyleText[h].texts[0].parent.parent.constructor.name == 'Table')
+                  {
+                    var startTable = foundStyleText[h].texts[0].parent.parent;
+                    try
+                    {
+                      if (contTable != null)
+                      {
+                        var tableArray = [startTable, contTable]
+                      }
+                      else
+                      {
+                        var tableArray = [startTable]
+                      }
+                    } catch (e) 
+                    {
+                      var tableArray = [startTable]
+                    }
+                    for (var a = 0; a < tableArray.length; a++)
+                    {
+                      var ck_rows = tableArray[a].rows;
+                      for (var r = 0; r < ck_rows.length; r++)
+                      {
+                        var ck_table = ck_rows[r];
+                        for (var t = 0; t < ck_table.cells.length; t++)
+                        {
+                          if (tableArray[a].cells[0].texts[0].paragraphs[0].contents.match('Explicitly Taught Vocabulary'))
+                          {
+                            var colLength = tableArray[a].columns.length
+                            if (ck_table.cells[t].texts[0].appliedParagraphStyle.name == 'outcomes_table_col-hd')
+                            {
+                              if (t == 0)
+                              {
+                                itrsLessonHTMLFullContents.itrsCoreHTML += '<tr class="lo-section-row">\n<td colspan="' + colLength + '">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td>\n';
+                              }
+                              else 
+                              {
+                                itrsLessonHTMLFullContents.itrsCoreHTML += '<td colspan="' + colLength + '">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td>\n';
+                              }
+                            }
+                            else if (t == 0 && ck_table.cells[t].texts[0].appliedParagraphStyle.name == 'outcomes_table_body-txt')
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<tr><td colspan="' + colLength + '">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td>'
+                            }
+                            else if (t < ck_table.cells.length - 1 && ck_table.cells[t].texts[0].appliedParagraphStyle.name == 'outcomes_table_body-txt')
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<td colspan="' + colLength + '">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td>'
+                            }
+                            else if (t == ck_table.cells.length - 1 && ck_table.cells[t].texts[0].appliedParagraphStyle.name == 'outcomes_table_body-txt')
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<td colspan="' + colLength + '">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td></tr>'
+                            }
+                            else if (ck_table.cells[t].texts[0].appliedParagraphStyle.name == 'outcomes_table_note')
+                            {
+                              colLength = Number(colLength) * Number(colLength)
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<tr><td colspan="' + colLength + '">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td></tr>'
+                            }
+                          }
+                          else if (ck_table.cells[t].texts[0].contents.length > 0)
+                          {
+                            if (ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_b-hd')
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<tr class="lo-section-row">\n<td colspan="3">' + convertTextToHTML(ck_table.cells[t].texts[0]) + '</td>\n';
+                            }
+                            else if (ck_table.cells.length > 1 && ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_body-txt')
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<tr><td>' + convertTextToHTML(ck_table.cells[t].texts[0]) + '</td>'
+                            }
+                            else if (ck_table.cells.length == 1 && ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_body-txt')
+                            {
+                              var col_span = ck_table.columns.length 
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<tr><td colspan="' + col_span + '">' + convertTextToHTML(ck_table.cells[t].texts[0]) + '</td></tr>'
+                            }
+                            else if (ck_table.cells.length > 1 && ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_body-txt_indent')
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<tr><td style="padding-left: 30px">' + convertTextToHTML(ck_table.cells[t].texts[0]) + '</td>'
+                            }
+                            else if (ck_table.cells.length == 1 && ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_body-txt_indent')
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<tr><td colspan="3" style="padding-left: 30px">' + convertTextToHTML(ck_table.cells[t].texts[0]) + '</td></tr>'
+                            }
+                            else if (ck_table.cells[t].texts[0].paragraphs[0].contents.match(/●/))
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<td class="lo-center"><span class="lo-marker lo-marker-fill" aria-hidden="true"></span></td>'
+                            }
+                            else if (ck_table.cells[t].texts[0].paragraphs[0].contents.match(/■/))
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<td class="lo-center"><span class="lo-marker lo-marker-assessed" aria-hidden="true"></span></td>'
+                            }
+                            else if (ck_table.cells.length == 1 && ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_body-txt')
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<tr><td colspan="3">' + convertTextToHTML(ck_table.cells[t].texts[0]) + '</td></tr>\n'
+                            }
+                            if (ck_table.cells.length > 1 && t == ck_table.cells.length - 1)
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '</tr>\n'
+                            }
+                          }
+                          else if (t == ck_table.cells.length - 1 && ck_table.cells[t].texts[0].contents.length == 0)
+                          {
+                            itrsLessonHTMLFullContents.itrsCoreHTML += '<td class="lo-center"></td></tr>\n'
+                          }
+                        }
+                      }
+                    }
+                  }
+                  itrsLessonHTMLFullContents.itrsCoreHTML += '</tbody></table></div></section>'
+                }
+            }
+          // itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n'
+          // '</section>\n'
+
+            itrsLessonHTMLFullContents.itrsClosingHTML = '</section>\n</main>\n</div>\n <script src="/js/bootstrap.bundle.min.js"></script>\n  <script src="/js/script.js"></script>\n<script src="/js/trs-communication-channel.js"></script>\n<script>\n(function () {\n  function applyStrandColor() {\n    var body = document.body;\n    if (!body) return;\n\n    var className = body.className || \'\';\n    var strand = null;\n\n    // Determine strand from body class\n    if (className.indexOf(\'strand-reading\') !== -1) {\n      strand = \'reading\';\n    } else if (className.indexOf(\'strand-phonics\') !== -1) {\n      strand = \'phonics\';\n    } else if (className.indexOf(\'strand-writing\') !== -1) {\n      strand = \'writing\';\n    }\n\n    if (!strand) return;\n\n    // Build CSS variable reference\n    var cssVar = \'var(--color-\' + strand + \'-rgb)\';\n\n    // Apply to :root\n    document.documentElement.style.setProperty(\'--strand-rgb\', cssVar);\n  }\n\n  // Run on page load\n  if (document.readyState === \'loading\') {\n    document.addEventListener(\'DOMContentLoaded\', applyStrandColor);\n  } else {\n    applyStrandColor();\n  }\n})();\n</script>\n\n</body>\n\n</html>'
+            var htmlFolder = Folder(lessonFolder + '/html');
+            if (!htmlFolder.exists) htmlFolder.create();
+            var fileName = 'unit-overview-ela-and-content-learning-outcomes' + '.html';
+            var itrsOutputFile = makeFile(htmlFolder.fsName + '/', fileName);
+
+            itrsOutputFile.open('w');
+            itrsOutputFile.write(
+                itrsLessonHTMLFullContents.itrsOpenerHTML +
+                itrsLessonHTMLFullContents.itrsCoreHTML + 
+                itrsLessonHTMLFullContents.itrsClosingHTML
+            )
+            itrsOutputFile.close();
+        }
+        // ---------------------------------------------------------- ELA Ends --------------------------------------------------
+
+        // ---------------------------------------------------------- iDELD Starts --------------------------------------------------
+        else if (doc.name.match(/_U\d+_iDELD/) != null && doc.name.match(/_W\d+/) == null)
+        {
+            var unitName = 'Unit ' + fileMetaData.unit + ' Overview'
+
+            var itrsLessonHTMLFullContents = {};
+            itrsLessonHTMLFullContents.itrsOpenerHTML = '<!doctype html>\n<html lang="en">\n\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + unitName + ' Tabs</title>\n<link rel="stylesheet" href="/css/bootstrap-5-3-3.css">\n<link rel="stylesheet" href="/css/fonts.css">\n<link rel="stylesheet" href="/css/styles.css">\n<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">\n</head>\n<body><div class="bec-content">\n';
+            itrsLessonHTMLFullContents.itrsOpenerHTML += '<main class="container lesson-shell overview-page overview-tabs-page" aria-label=' +'"' + unitName  + '"' + '>\n';
+
+            itrsLessonHTMLFullContents.itrsCoreHTML = '<section class="overview-section" aria-labelledby="eld-heading">\n'
+            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="overview-section-heading mb-3">\n<span class="overview-section-marker" aria-hidden="true"></span>\n<h2 id="eld-heading" class="mb-0">Integrated and Designated ELD Standards</h2></div>\n'
+            var styleArray = ['intro_text']
+            var foundStyleText = findTextOffset(styleArray, 0);
+            itrsLessonHTMLFullContents.itrsCoreHTML += 
+            '<p class="overview-body-text mb-4">' + convertTextToHTML(foundStyleText[0]) + '</p>\n'; 
+            var foundStyleText = []
+            app.findGrepPreferences = app.changeGrepPreferences = null;
+            app.findChangeGrepOptions.includeMasterPages = false;
+            app.findChangeGrepOptions.includeLockedStoriesForFind = true;
+            app.findChangeGrepOptions.includeLockedLayersForFind = true;
+            app.findGrepPreferences.appliedParagraphStyle = app.activeDocument.paragraphStyles.itemByName('b-hd')
+            var found = app.activeDocument.findGrep();
+            if (found.length > 0)
+            {
+              for (var f = 0; f < found.length; f++)
+              {
+                if (found[f].contents.match(/^Part/))
+                {
+                  foundStyleText.push(found[f])
+                }
+              }
+            }
+            var p = 0
+            for (var h = 0; h < foundStyleText.length; h++)
+            {
+                if (foundStyleText[h].texts[0].appliedParagraphStyle.name == 'b-hd')
+                {
+                  p++
+                    itrsLessonHTMLFullContents.itrsCoreHTML +=  '<section class="lo-block lo-block-black mb-4"  aria-labelledby="eld-part' + p + '-heading">\n' +
+                    '<div class="lo-header-row">\n' + 
+                    '<div>\n';
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 id="eld-part' + p + '-heading" class="overview-subheading mb-2">' + convertTextToHTML(foundStyleText[h].texts[0]) + '</h3>\n';
+
+                  if (foundStyleText[h].texts[0].parent.constructor.name == 'Cell')
+                  {
+                    for (var z = 0; z < foundStyleText[h].texts[0].parent.texts[0].paragraphs.length; z++)
+                    {
+                      if (foundStyleText[h].texts[0].parent.texts[0].paragraphs[z].texts[0].appliedParagraphStyle.name == 'outcomes_table_body-txt_10pt' || foundStyleText[h].texts[0].parent.texts[0].paragraphs[z].texts[0].appliedParagraphStyle.name == 'outcomes_table_body-txt 9pt' || foundStyleText[h].texts[0].parent.texts[0].paragraphs[z].texts[0].appliedParagraphStyle.name == 'outcomes_table_body-txt')
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="lo-meta">' + convertTextToHTML(foundStyleText[h].texts[0].parent.texts[0].paragraphs[z].texts[0]) + '</p>\n '
+                      }
+                    }
+                  }
+                  if (p == 1)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n<div class="lo-legend" aria-label="Legend">\n' + 
+                    '<div class="lo-legend-item"><span class="lo-marker lo-marker-fill" aria-hidden="true"></span>First introduction of standard</div>\n' +
+                    '<div class="lo-legend-item"><span class="lo-marker lo-marker-outline" aria-hidden="true"></span>Previously taught standard</div>\n' + 
+                  '</div>\n'
+                  }
+                  else
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n'
+                  }
+
+                  itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n<div class="table-responsive-xl overview-table-wrap">\n';
+                  itrsLessonHTMLFullContents.itrsCoreHTML += '<table class="table table-bordered align-middle overview-table lo-table lo-table-black lo-eld-table">\n<tbody>\n';
+                  var styleContArray = ['b-hd']
+                  var contStyleText = findText(styleContArray);
+                  // $.writeln(foundStyleText[h].contents.toString())
+                  var contTable = null;
+                  for (var r = 0; r < contStyleText.length; r++)
+                  {
+                    if (contStyleText[r].contents.match(/continued/) != null && contStyleText[r].paragraphs[0].contents.toString().match(foundStyleText[h].contents.toString().replace('\r', '')))
+                    {
+                      if (contStyleText[r].texts[0].parent.parent.constructor.name == 'Table')
+                      {
+                        var contTable = contStyleText[r].texts[0].parent.parent;
+                      }
+                    }
+                  }
+                  if (foundStyleText[h].texts[0].parent.parent.constructor.name == 'Table')
+                  {
+                    var startTable = foundStyleText[h].texts[0].parent.parent;
+                    try
+                    {
+                      if (contTable != null)
+                      {
+                        var tableArray = [startTable, contTable]
+                      }
+                      else
+                      {
+                        var tableArray = [startTable]
+                      }
+                    } catch (e) 
+                    {
+                      var tableArray = [startTable]
+                    }
+                    for (var a = 0; a < tableArray.length; a++)
+                    {
+                      var ck_rows = tableArray[a].rows;
+                      for (var r = 0; r < ck_rows.length; r++)
+                      {
+                        var hollowCircle = false;
+                        var ck_table = ck_rows[r];
+                        for (var t = 0; t < ck_table.cells.length; t++)
+                        {
+                          if (ck_table.cells[t].texts[0].contents.length > 0)
+                          {
+                            if (ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_b-hd')
+                            {
+                              var colLength = ck_table.parent.columns.length;
+                              if (ck_table.cells.length == 1)
+                              {
+                                itrsLessonHTMLFullContents.itrsCoreHTML += '<tr class="lo-section-row">\n<td colspan="' + colLength + '">' + convertTextToHTML(ck_table.cells[t].texts[0]) + '</td>\n</tr>';  
+                              }
+                              else
+                              {
+                                if (ck_table.cells[t].rows[0].cells.everyItem().texts[0].contents == ck_table.cells[t].texts[0].contents)
+                                {
+                                  itrsLessonHTMLFullContents.itrsCoreHTML += '<tr class="lo-section-row">\n<td colspan="' + colLength + '">' + convertTextToHTML(ck_table.cells[t].texts[0]) + '</td>\n</tr';
+                                }
+                                else
+                                {
+                                  itrsLessonHTMLFullContents.itrsCoreHTML += '<tr class="lo-section-row">\n<td>' + convertTextToHTML(ck_table.cells[t].texts[0]) + '</td>\n';
+                                }
+                              }
+                            }
+                            if (ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_key' || ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_b-hd_center')
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<td>' + convertTextToHTML(ck_table.cells[t].texts[0]) + '</td>\n';
+                              if (t == ck_table.cells.length - 1)
+                              {
+                                itrsLessonHTMLFullContents.itrsCoreHTML += '</tr>'
+                              }
+                            }
+                            else if (ck_table.cells.length > 1 && ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_body-txt' || ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_body-txt 9pt')
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<tr><td>' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td>'
+                            }
+                            else if (ck_table.cells.length > 1 && ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_body-txt_indent')
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<tr><td style="padding-left: 30px">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td>'
+                            }
+                            else if (ck_table.cells.length == 1 && ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_body-txt_indent')
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<tr><td colspan="3" style="padding-left: 30px">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td></tr>'
+                            }
+                            else if (ck_table.cells[t].texts[0].paragraphs[0].contents.match(/●/))
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<td class="lo-center"><span class="lo-marker lo-marker-fill" aria-hidden="true"></span></td>'
+                              hollowCircle = true
+                            }
+                            else if (ck_table.cells.length == 1 && ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'outcomes_table_body-txt')
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<tr><td colspan="3">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td></tr>\n'
+                            }
+                            if (ck_table.cells.length > 1 && t == ck_table.cells.length - 1)
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '</tr>\n'
+                            }
+                          }
+                          else if (t == ck_table.cells.length - 1 && ck_table.cells[t].texts[0].contents.length == 0 && ck_table.cells[t].rows[0].cells[0].texts[0].appliedParagraphStyle.name != 'outcomes_table_b-hd')
+                          {
+                            itrsLessonHTMLFullContents.itrsCoreHTML += '<td class="lo-center"><span class="lo-marker lo-marker-outline" aria-hidden="true"></span></td>'
+                            // itrsLessonHTMLFullContents.itrsCoreHTML += '<td class="lo-center"></td></tr>\n'
+                          }
+                          else if (t == 1 && ck_table.cells[t].texts[0].contents.length == 0 && ck_table.cells[t+1].contents.length > 0 && ck_table.cells[t].rows[0].cells[0].texts[0].appliedParagraphStyle.name != 'outcomes_table_b-hd')
+                          {
+                            itrsLessonHTMLFullContents.itrsCoreHTML += '<td class="lo-center"><span class="lo-marker lo-marker-outline" aria-hidden="true"></span></td>'
+                          }
+                          // else if (ck_table.cells[t].texts[0].contents.length == 0 && ck_table.cells[t].rows[0].cells[0].texts[0].appliedParagraphStyle.name == 'outcomes_table_b-hd')
+                          // {
+                          //   var colLength = ck_table.parent.columns.length
+                          //   itrsLessonHTMLFullContents.itrsCoreHTML += '<td colspan="' + colLength + '"></td>'
+                          // }
+                        }
+                      }
+                    }
+                  }
+                  itrsLessonHTMLFullContents.itrsCoreHTML += '</tbody></table></div></section>'
+                }
+            }
+          // itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n'
+          // '</section>\n'
+
+            itrsLessonHTMLFullContents.itrsClosingHTML = '</section>\n</main>\n</div>\n <script src="/js/bootstrap.bundle.min.js"></script>\n  <script src="/js/script.js"></script>\n<script src="/js/trs-communication-channel.js"></script>\n<script>\n(function () {\n  function applyStrandColor() {\n    var body = document.body;\n    if (!body) return;\n\n    var className = body.className || \'\';\n    var strand = null;\n\n    // Determine strand from body class\n    if (className.indexOf(\'strand-reading\') !== -1) {\n      strand = \'reading\';\n    } else if (className.indexOf(\'strand-phonics\') !== -1) {\n      strand = \'phonics\';\n    } else if (className.indexOf(\'strand-writing\') !== -1) {\n      strand = \'writing\';\n    }\n\n    if (!strand) return;\n\n    // Build CSS variable reference\n    var cssVar = \'var(--color-\' + strand + \'-rgb)\';\n\n    // Apply to :root\n    document.documentElement.style.setProperty(\'--strand-rgb\', cssVar);\n  }\n\n  // Run on page load\n  if (document.readyState === \'loading\') {\n    document.addEventListener(\'DOMContentLoaded\', applyStrandColor);\n  } else {\n    applyStrandColor();\n  }\n})();\n</script>\n\n</body>\n\n</html>'
+            var htmlFolder = Folder(lessonFolder + '/html');
+            if (!htmlFolder.exists) htmlFolder.create();
+            // var fileName = unitName + '_' + doc.name.replace(/^.*_U\d+_/, '').replace('.indd', '') + '.html';
+            var fileName = 'unit-overview-integrated-and-designated-eld-standards' + '.html';
+            var itrsOutputFile = makeFile(htmlFolder.fsName + '/', fileName);
+
+            itrsOutputFile.open('w');
+            itrsOutputFile.write(
+                itrsLessonHTMLFullContents.itrsOpenerHTML +
+                itrsLessonHTMLFullContents.itrsCoreHTML + 
+                itrsLessonHTMLFullContents.itrsClosingHTML
+            )
+            itrsOutputFile.close();
+        }
+        // ---------------------------------------------------------- iDELD Ends --------------------------------------------------
+
+        // ------------------------------------------------------ Assessment Starts -----------------------------------------------
+        else if (doc.name.match(/_U\d+_ASMT/) != null && doc.name.match(/_W\d+/) == null && ASMT_proceed == false)
+        {
+            // ASMT_proceed = true;
+              var unitName = 'Unit ' + fileMetaData.unit + ' Overview'
+
+            var itrsLessonHTMLFullContents = {};
+            itrsLessonHTMLFullContents.itrsOpenerHTML = '<!doctype html>\n<html lang="en">\n\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + unitName + ' Tabs</title>\n<link rel="stylesheet" href="/css/bootstrap-5-3-3.css">\n<link rel="stylesheet" href="/css/fonts.css">\n<link rel="stylesheet" href="/css/styles.css">\n<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">\n</head>\n<body><div class="bec-content">\n';
+            itrsLessonHTMLFullContents.itrsOpenerHTML += '<main class="container lesson-shell overview-page overview-tabs-page" aria-label=' +'"' + unitName  + '"' + '>\n';
+
+            itrsLessonHTMLFullContents.itrsCoreHTML = '<section class="overview-section mb-5" aria-labelledby="assessment-types-heading">\n'
+            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="overview-section-heading mb-3">\n<span class="overview-section-marker" aria-hidden="true"></span>\n<h2 id="assessment-types-heading" class="mb-0">Screener and Formative Assessments</h2></div>\n'
+            try
+            {
+              var styleArray = ['intro_text']
+              var foundStyleText = findTextOffset(styleArray, 0);
+              itrsLessonHTMLFullContents.itrsCoreHTML += 
+              '<p class="overview-body-text mb-4">' + convertTextToHTML(foundStyleText[0]) + '</p>\n'; 
+              var styleArray = ['b-hd', 'b-hd_screener']
+              var foundStyleText = findTextOffset(styleArray, 0);
+
+              for (var h = 0; h < foundStyleText.length; h++)
+              {
+                  if (foundStyleText[h].texts[0].appliedParagraphStyle.name == 'b-hd' || foundStyleText[h].texts[0].appliedParagraphStyle.name == 'b-hd_screener')
+                  {
+                    if (foundStyleText[h].texts[0].parent.constructor.name == 'Cell')
+                    {
+                      var findIndex = foundStyleText[h].texts[0].parent.rows[0].index
+                    }
+
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="table-responsive-xl overview-table-wrap mb-4">\n';
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<table class="table table-bordered align-middle overview-table">\n<colgroup>\n<col style="width:33%">\n<col style="width:33%">\n<col style="width:34%">\n</colgroup><tbody>\n';
+                    if (foundStyleText[h].texts[0].parent.parent.constructor.name == 'Table')
+                    {
+                      var tableArray = foundStyleText[h].texts[0].parent.parent
+                      var ck_rows = tableArray.rows;
+                      var p = 0;
+                      var diacritic = null
+                      for (var r = findIndex; r < ck_rows.length; r++)
+                      {
+                        var ck_table = ck_rows[r];
+                        for (var t = 0; t < ck_table.cells.length; t++)
+                        {
+                          if (ck_table.cells[t].texts[0].contents.length > 0)
+                          {
+                            if ((ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'b-hd' && p == 0) || (ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'b-hd_screener' && p == 0))
+                            {
+                              if (t == 0)
+                              {
+                                itrsLessonHTMLFullContents.itrsCoreHTML += '<tr>';
+                              }
+                              if (ck_table.cells[t].texts[0].paragraphs[0].contents.match('Tier 1 Lesson Formative Assessments'))
+                              {
+                                var diacritic = '<span class="d-inline-block me-2" style="width:18px;height:16px;background:#f46a1f;clip-path:polygon(50% 0, 0 100%, 100% 100%);vertical-align:middle;"></span>'
+                              }
+                              else if (ck_table.cells[t].texts[0].paragraphs[0].contents.match('Tier 1 End of Unit Assessment'))
+                              {
+                                var diacritic = '<span class="d-inline-block me-2" style="width:16px;height:16px;background:#282828;vertical-align:middle;"></span>'
+                              }
+                              else if (ck_table.cells[t].texts[0].paragraphs[0].contents.match('Tier 2/Tier 3 Assessments'))
+                              {
+                                var diacritic = '<span class="d-inline-block me-2" style="width:16px;height:16px;background:#282828;vertical-align:middle;"></span>'
+                              }
+                              if (diacritic != null)
+                              {
+                                itrsLessonHTMLFullContents.itrsCoreHTML += '<tr class="lo-section-row">\n<td colspan="3">' + diacritic + ck_table.cells[t].texts[0].contents.replace('▲', '').replace('■', '').replace(/^\s+/,'') + '</td>\n</tr>';
+                              }
+                              else
+                              {
+                                itrsLessonHTMLFullContents.itrsCoreHTML += '<tr class="lo-section-row">\n<td colspan="3">' + ck_table.cells[t].texts[0].contents + '</td>\n</tr>';
+                              }
+                              p++
+                            }
+                            else if (ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'b-hd' && p > 0)
+                            {
+                              r = ck_rows.length - 1
+                              break;
+                            }
+                            else if (ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'Assessment table-hd' || ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'knowledge_table_col-hd')
+                            {
+                              app.select(null);
+                              app.select(ck_table.cells[t]);
+                              app.selection[0].unmerge();
+                              var row_span = app.selection[0].cells.length;
+                              app.selection[0].merge();
+                              if (ck_table.cells[t].texts[0].paragraphs.length > 1)
+                              {
+                                if (t == 0)
+                                {
+                                  itrsLessonHTMLFullContents.itrsCoreHTML += '<tr>';  
+                                }
+                                  itrsLessonHTMLFullContents.itrsCoreHTML += '<td rowspan="' + row_span + '">' + convertCellToHTML(ck_table.cells[t].texts[0])
+                                  itrsLessonHTMLFullContents.itrsCoreHTML += '</td>'
+                              }
+                              else if (ck_table.cells[t].texts[0].paragraphs.length == 1)
+                              {
+                                itrsLessonHTMLFullContents.itrsCoreHTML += '<td rowspan="' + row_span + '">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td>'
+                              }
+                            }
+                            else if (ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'knowledge_table_body-txt' || ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'Assessment table body-text-360')
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '<td>' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td>'
+                            }
+                            if (t == ck_table.cells.length - 1)
+                            {
+                              itrsLessonHTMLFullContents.itrsCoreHTML += '</tr>\n'
+                            }
+                          }
+                        }
+                      }
+                    }
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '</tbody></table></div></section>'
+                  }
+              }
+            } catch (e) {}
+          // itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n'
+          // '</section>\n'
+
+            itrsLessonHTMLFullContents.itrsClosingHTML = '</section>\n</main>\n</div>\n <script src="/js/bootstrap.bundle.min.js"></script>\n  <script src="/js/script.js"></script>\n<script src="/js/trs-communication-channel.js"></script>\n<script>\n(function () {\n  function applyStrandColor() {\n    var body = document.body;\n    if (!body) return;\n\n    var className = body.className || \'\';\n    var strand = null;\n\n    // Determine strand from body class\n    if (className.indexOf(\'strand-reading\') !== -1) {\n      strand = \'reading\';\n    } else if (className.indexOf(\'strand-phonics\') !== -1) {\n      strand = \'phonics\';\n    } else if (className.indexOf(\'strand-writing\') !== -1) {\n      strand = \'writing\';\n    }\n\n    if (!strand) return;\n\n    // Build CSS variable reference\n    var cssVar = \'var(--color-\' + strand + \'-rgb)\';\n\n    // Apply to :root\n    document.documentElement.style.setProperty(\'--strand-rgb\', cssVar);\n  }\n\n  // Run on page load\n  if (document.readyState === \'loading\') {\n    document.addEventListener(\'DOMContentLoaded\', applyStrandColor);\n  } else {\n    applyStrandColor();\n  }\n})();\n</script>\n\n</body>\n\n</html>'
+            var htmlFolder = Folder(lessonFolder + '/html');
+            if (!htmlFolder.exists) htmlFolder.create();
+            // var fileName = unitName + '_' + doc.name.replace(/^.*_U\d+_/, '').replace('.indd', '') + '.html';
+            var fileName = 'unit-overview-screener-and-formative-assessments' + '.html';
+            var itrsOutputFile = makeFile(htmlFolder.fsName + '/', fileName);
+
+            itrsOutputFile.open('w');
+            itrsOutputFile.write(
+                itrsLessonHTMLFullContents.itrsOpenerHTML +
+                itrsLessonHTMLFullContents.itrsCoreHTML + 
+                itrsLessonHTMLFullContents.itrsClosingHTML
+            )
+            itrsOutputFile.close();
+        }
+        // ------------------------------------------------------ Assessment Ends -----------------------------------------------
+
+        // -------------------------------------------------- Culminating Tasks Starts ------------------------------------------
+
+        else if (doc.name.match(/CulminatingTask/) != null && doc.name.match(/_W\d+/) == null && ASMT_proceed == false)
+        {
+            // ASMT_proceed = false;
+            var unitName = 'Unit ' + fileMetaData.unit + ' Overview'
+
+            var itrsLessonHTMLFullContents = {};
+            itrsLessonHTMLFullContents.itrsOpenerHTML = '<!doctype html>\n<html lang="en">\n\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + unitName + ' Tabs</title>\n<link rel="stylesheet" href="/css/bootstrap-5-3-3.css">\n<link rel="stylesheet" href="/css/fonts.css">\n<link rel="stylesheet" href="/css/styles.css">\n<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">\n</head>\n<body><div class="bec-content">\n';
+            itrsLessonHTMLFullContents.itrsOpenerHTML += '<main class="container lesson-shell overview-page overview-tabs-page" aria-label=' +'"' + unitName  + '"' + '>\n';
+
+            itrsLessonHTMLFullContents.itrsCoreHTML = '<section class="overview-section mb-5" aria-labelledby="planner-heading">\n'
+            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="overview-section-heading mb-3">\n<span class="overview-section-marker" aria-hidden="true"></span>\n<h2 id="planner-heading" class="mb-0">Culminating Tasks</h2></div>\n<div class="overview-table-wrap">\n'
+            var listStart = false;
+            var p_start = false;
+            var culminativeImage = app.activeDocument.pages[1].allGraphics[0];
+            var culminativeTaskImage = culminativeImage.parent.exportAs('png', 'max', 300, lessonFolder + '/images/Culminating-Tasks' + '.png')
+
+            app.findGrepPreferences = app.changeGrepPreferences = null;
+            app.findChangeGrepOptions.includeMasterPages = false;
+            app.findChangeGrepOptions.includeLockedStoriesForFind = true;
+            app.findChangeGrepOptions.includeLockedLayersForFind = true;
+            app.findGrepPreferences.findWhat = 'Culminating Task Writing'
+            app.findGrepPreferences.appliedParagraphStyle = app.activeDocument.paragraphStyles.itemByName('CulminatingTask_b-hd')
+            var found = app.activeDocument.findGrep();
+            if (found.length > 0)
+            {
+                for (var f = 0; f < found.length; f++)
+                {
+                  var CT_textFrame = found[f].parentTextFrames[0];
+                  itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="overview-intro-copy mb-5">\n<h3 class="overview-subheading mb-2">' + convertTextToHTML(found[f].texts[0]) + '</h3>';
+                  for (var t = 1; t < CT_textFrame.paragraphs.length; t++)
+                  {
+                    
+                    if (CT_textFrame.paragraphs[t].texts[0].appliedParagraphStyle.name == 'CulminatingTask_b-hd' && CT_textFrame.paragraphs[t].texts[0].contents.match('Culminating Task Writing'))
+                    {
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="overview-subheading mb-2">' + convertTextToHTML(CT_textFrame.paragraphs[t].texts[0]) + '</h3>';
+                    }
+                    else if (CT_textFrame.paragraphs[t].texts[0].appliedParagraphStyle.name == 'Culminating task text')
+                    {
+                      if (p_start == false)
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="d-flex flex-column align-self-stretch">';
+                        p_start = true;
+                      }
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="overview-body-text mb-2">' + convertTextToHTML(CT_textFrame.paragraphs[t].texts[0]) + '</p>';
+                      // if (CT_textFrame.paragraphs[t].texts[0].appliedParagraphStyle.name != 'Culminating task text')
+                      // {
+                      //   itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n</div>';
+                      // }
+                    }
+                    else if (CT_textFrame.paragraphs[t].texts[0].appliedParagraphStyle.name == 'CulminatingTask_c-hd')
+                    {
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="overview-body-text mb-2" style="margin-top:10px">' + convertTextToHTML(CT_textFrame.paragraphs[t].texts[0]) + '</p>';
+                    }
+
+                    else if (CT_textFrame.paragraphs[t].texts[0].appliedParagraphStyle.name == 'CulminatingTask_space-before-prompt')
+                    {
+                      if (CT_textFrame.paragraphs[t].tables.length > 0)
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '</div></div><div class="d-flex align-items-start gap-3 mb-5 flex-wrap">\n<span class="unit-prompt-badge">Prompt</span>';
+                        for (var p1 = 0; p1 < CT_textFrame.paragraphs[t].tables[0].cells[1].texts[0].paragraphs.length; p1++)
+                        {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="overview-body-text mb-0"><strong>' + convertTextToHTML(CT_textFrame.paragraphs[t].tables[0].cells[1].texts[0].paragraphs[p1].texts[0]) + '</strong></p>';
+                        }
+                        
+                      }
+                    }
+                    else if (CT_textFrame.paragraphs[t].texts[0].appliedParagraphStyle.name == 'CulminatingTask_b-hd' && CT_textFrame.paragraphs[t].texts[0].contents.match('Culminating Task Project'))
+                    {
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n<div class="unit-culminating-project">\n <div class="d-flex flex-column"><h3 class="overview-subheading mb-3">' + convertTextToHTML(CT_textFrame.paragraphs[t].texts[0]) + '</h3>';
+                    }
+                    else if (CT_textFrame.paragraphs[t].texts[0].appliedParagraphStyle.name == 'Culminating Task_bullets')
+                    {
+                      if (listStart == false)
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<ul class="overview-topic-list">\n';
+                        listStart = true;
+                      }
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<li>' + convertTextToHTML(CT_textFrame.paragraphs[t].texts[0]) + '</li>';
+                      if (t == CT_textFrame.paragraphs.length - 1)
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '</ul>\n</div>';
+                      }
+                    }
+                  }
+                }
+             }
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<img class="unit-culminating-project-image" src="./images/Culminating-Tasks.png" alt="Culminating Task Project">\n</div></section>'
+          // itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n'
+          // '</section>\n'
+
+            itrsLessonHTMLFullContents.itrsClosingHTML = '</section>\n</main>\n</div>\n <script src="/js/bootstrap.bundle.min.js"></script>\n  <script src="/js/script.js"></script>\n<script src="/js/trs-communication-channel.js"></script>\n<script>\n(function () {\n  function applyStrandColor() {\n    var body = document.body;\n    if (!body) return;\n\n    var className = body.className || \'\';\n    var strand = null;\n\n    // Determine strand from body class\n    if (className.indexOf(\'strand-reading\') !== -1) {\n      strand = \'reading\';\n    } else if (className.indexOf(\'strand-phonics\') !== -1) {\n      strand = \'phonics\';\n    } else if (className.indexOf(\'strand-writing\') !== -1) {\n      strand = \'writing\';\n    }\n\n    if (!strand) return;\n\n    // Build CSS variable reference\n    var cssVar = \'var(--color-\' + strand + \'-rgb)\';\n\n    // Apply to :root\n    document.documentElement.style.setProperty(\'--strand-rgb\', cssVar);\n  }\n\n  // Run on page load\n  if (document.readyState === \'loading\') {\n    document.addEventListener(\'DOMContentLoaded\', applyStrandColor);\n  } else {\n    applyStrandColor();\n  }\n})();\n</script>\n\n</body>\n\n</html>'
+            var htmlFolder = Folder(lessonFolder + '/html');
+            if (!htmlFolder.exists) htmlFolder.create();
+            // var fileName = unitName + '_' + doc.name.replace(/^.*_U\d+_/, '').replace('.indd', '') + '.html';
+            var fileName = 'unit-overview-culminating-tasks' + '.html';
+            var itrsOutputFile = makeFile(htmlFolder.fsName + '/', fileName.replace('_ASMTOpp+', '_'));
+
+            itrsOutputFile.open('w');
+            itrsOutputFile.write(
+                itrsLessonHTMLFullContents.itrsOpenerHTML +
+                itrsLessonHTMLFullContents.itrsCoreHTML + 
+                itrsLessonHTMLFullContents.itrsClosingHTML
+            )
+            itrsOutputFile.close();
+        }
+        // -------------------------------------------------- Culminating Tasks Ends --------------------------------------------
+
+        // ------------------------------------------------- Resource at Glance Starts ------------------------------------------
+        
+        else if (doc.name.match(/_U\d+_Resource/) != null && doc.name.match(/_W\d+/) == null)
+        {
+            var unitName = 'Unit ' + fileMetaData.unit + ' Overview'
+            try
+            {
+              app.doScript(new File(File($.fileName).parent+"/package_folder_contents/overview/js/resource.jsx"), ScriptLanguage.JAVASCRIPT)
+            } catch (e)
+            {
+              finishedLog.open('a');
+              finishedLog.write('Issue in resource script ------- ' + doc.name);
+              finishedLog.close();
+            }
+            try
+            {
+              var itrsLessonHTMLFullContents = {};
+              itrsLessonHTMLFullContents.itrsOpenerHTML = '<!doctype html>\n<html lang="en">\n\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + unitName + ' Tabs</title>\n<link rel="stylesheet" href="/css/bootstrap-5-3-3.css">\n<link rel="stylesheet" href="/css/fonts.css">\n<link rel="stylesheet" href="/css/styles.css">\n<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">\n</head>\n<body><div class="bec-content">\n';
+              itrsLessonHTMLFullContents.itrsOpenerHTML += '<main class="container lesson-shell overview-page overview-tabs-page" aria-label=' +'"' + unitName  + '"' + '>\n';
+
+              itrsLessonHTMLFullContents.itrsCoreHTML = '<section class="overview-section mb-5" aria-labelledby="resources-collab-heading">\n'
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="overview-section-heading mb-3">\n<span class="overview-section-marker" aria-hidden="true"></span>\n<h2 id="resources-collab-heading" class="mb-0">Collaborative Core</h2></div>\n'
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="d-flex flex-wrap align-items-start resource-gap-30 mb-5 resource-collab-grid">\n'
+
+              var essential = findGroups('Essential', 0)
+
+              for (var e1 = 0; e1 < essential.length; e1++)
+              {
+                var imageLoop = null
+                var essentialImage = null
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="d-flex flex-column resource-card">\n';
+                if (essential[e1].groups.length > 0)
+                {
+                  for (var r = 0; r < essential[e1].groups.length; r++)
+                  {
+                      var imageLoop = essential[e1].groups[r];
+                      if (essential[e1].groups[r].groups.length > 0)
+                      {
+                        var imageLoop = essential[e1].groups[r].groups[0]
+                      }
+                      var essentialImage = imageLoop.exportAs('png', 'max', 300, lessonFolder + '/images/' + imageLoop.allGraphics[0].itemLink.name.split('.')[0] + '.png');
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-wide"><img class="img-fluid resource-image" src="./images/' + imageLoop.allGraphics[0].itemLink.name.split('.')[0] + '.png"' + ' alt="' + essential[e1].textFrames[0].contents + '"></div>\n'
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="unit-resource-label">' + essential[e1].textFrames[0].contents.replace('\n', ' ') + '</h3>\n</article>\n'
+                      break;
+                  }
+                }
+                for (var i1 = 0; i1 < essential[e1].rectangles.length; i1++)
+                {
+                  if (imageLoop != null)
+                  {
+                    var essentialImgItem = imageLoop;
+                  }
+                  else if (essential[e1].rectangles[i1].images.length > 0)
+                  {
+                    var essentialImgItem = essential[e1].rectangles[i1];
+                  }
+                  if (essentialImgItem != null)
+                  {
+                    var essentialImage = essentialImgItem.exportAs('png', 'max', 300, lessonFolder + '/images/' + essentialImgItem.allGraphics[0].itemLink.name.split('.')[0] + '.png');
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-book"><img class="img-fluid resource-image" src="./images/' + essentialImgItem.allGraphics[0].itemLink.name.split('.')[0] + '.png"' + ' alt="' + essential[e1].textFrames[0].contents + '"></div>\n'
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="unit-resource-label">' + essential[e1].textFrames[0].contents.replace('\n', ' ') + '</h3>\n</article>\n'
+                  }
+                }
+              }
+
+              itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n<h3 class="overview-subheading mb-3">Knowledge Building Resources</h3>\n<div class="resource-row-30 align-items-start resource-kb-layout">\n<div class="col-12 col-md-auto">\n<div class="d-flex flex-column flex-sm-row align-items-start resource-gap-30">\n'
+              var knowledge = findGroups('Knowledge', 0)
+              for (var k1 = 0; k1 < knowledge.length; k1++)
+              {
+                try
+                {
+                  if (knowledge[k1].groups.length > 0)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="d-flex flex-column resource-card resource-card-double resource-card-double-wide">\n'
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="d-flex gap-2 resource-pair resource-pair-wide">\n';
+                    for (var r = 0; r < knowledge[k1].groups.length; r++)
+                    {
+                      var imageLoop = null
+                      if (knowledge[k1].groups[r].allGraphics.length > 0)
+                      {
+                        var imageLoop = knowledge[k1].groups[r];
+                        for (var s = 0; s < imageLoop.rectangles.length; s++)
+                        {
+                          if (imageLoop.rectangles[s].allGraphics.length)
+                          {
+                            var essentialImage = imageLoop.rectangles[s].allGraphics[0].exportAs('png', 'max', 300, lessonFolder + '/images/' + imageLoop.rectangles[s].allGraphics[0].itemLink.name.split('.')[0] + '.png');
+                            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-book"><img class="img-fluid resource-image" src="./images/' + imageLoop.rectangles[s].allGraphics[0].itemLink.name.split('.')[0] + '.png"' + ' alt="' + knowledge[k1].textFrames[0].contents + '"></div>\n'
+                          }
+                        }
+                      }
+                    }
+                  }
+                  else
+                  {
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="d-flex flex-column resource-card">\n'
+                      if (knowledge[k1].rectangles[0].allGraphics.length)
+                      {
+                        var essentialImage = knowledge[k1].rectangles[0].allGraphics[0].exportAs('png', 'max', 300, lessonFolder + '/images/' + knowledge[k1].rectangles[0].allGraphics[0].itemLink.name.split('.')[0] + '.png');
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-book"><img class="img-fluid resource-image" src="./images/' + knowledge[k1].rectangles[0].allGraphics[0].itemLink.name.split('.')[0] + '.png"' + ' alt="' + knowledge[k1].textFrames[0].contents + '"></div>\n'
+                      }
+                  }
+                  if (knowledge[k1].groups.length > 0)
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '</div><h3 class="unit-resource-label">' + knowledge[k1].textFrames[0].contents.replace('\n', ' ') + '</h3>\n</article>\n'
+                  }
+                  else
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="unit-resource-label">' + knowledge[k1].textFrames[0].contents.replace('\n', ' ') + '</h3>\n</article>\n'
+                  }
+                } catch (e) {}
+              }
+              itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n</div>'
+              var styleArray = ['body-txt_bullets_stars']
+              var foundStyleText = findTextOffset(styleArray, 0);
+              if (foundStyleText.length > 0)
+              {
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="col-12 col-md">\n';
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<ul class="overview-topic-list unit-resource-list mt-4">\n';
+                for (var f = 0; f < foundStyleText.length; f++)
+                {
+                  if (foundStyleText[f].parentTextFrames[0].geometricBounds[0] < 520)
+                  {
+                    for (var p = 0; p < foundStyleText[f].texts[0].paragraphs.length; p++)
+                    {
+                      var KnowledgeList = foundStyleText[f].texts[0].paragraphs[p];
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<li>' + convertTextToHTML(foundStyleText[f].texts[0].paragraphs[p].texts[0]) + '</li>\n';
+                    }
+                  }
+                }
+                itrsLessonHTMLFullContents.itrsCoreHTML += '</ul>\n</div>\n</div>\n';
+              }
+
+              itrsLessonHTMLFullContents.itrsCoreHTML += '</section>\n<section class="overview-section mb-5" aria-labelledby="resources-winn-heading">\n';
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="overview-section-heading mb-3">\n';
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<span class="overview-section-marker" aria-hidden="true"></span>\n<h2 id="resources-winn-heading" class="mb-0">WINN Time-What I Need Now!</h2>\n</div>\n';
+              for (var t = 0; t < doc.pages[1].textFrames.length; t++)
+              {
+                if (doc.pages[1].textFrames[t].paragraphs[0].appliedParagraphStyle.name == 'b-hd_resource_sm' && doc.pages[1].textFrames[t].paragraphs[0].contents.match('^Lesson') != null)
+                {
+                  var Lesson_Frame = doc.pages[1].textFrames[t];
+                  itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="unit-kb-week-goal mb-2">' + doc.pages[1].textFrames[t].paragraphs[0].contents.replace('\n', ' ') + '</p>\n';
+                  for (var p = 1; p < Lesson_Frame.paragraphs.length; p++)
+                  {
+                      if (p == Lesson_Frame.paragraphs.length - 1)
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="overview-body-text mb-4">' + Lesson_Frame.paragraphs[p].contents.replace('\n', ' ') + '</p>\n';
+                      }
+                      else
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="overview-body-text mb-2">' + Lesson_Frame.paragraphs[p].contents.replace('\n', ' ') + '</p>\n';
+                      }
+                  }
+                }
+              }
+              for (var t = 0; t < doc.pages[1].textFrames.length; t++)
+              {
+                if (doc.pages[1].textFrames[t].paragraphs[0].appliedParagraphStyle.name == 'b-hd_resource_sm' && doc.pages[1].textFrames[t].paragraphs[0].contents.match('^Support') != null)
+                {
+                  var bl = false
+                  var Lesson_Frame = doc.pages[1].textFrames[t];
+                  itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="unit-kb-week-goal mb-2">' + doc.pages[1].textFrames[t].paragraphs[0].contents.replace('\n', ' ') + '</p>\n';
+                  for (var p = 1; p < Lesson_Frame.paragraphs.length; p++)
+                  {
+                    if (Lesson_Frame.paragraphs[p].appliedParagraphStyle.name == 'body_txt_resources')
+                    {
+                      if (p == Lesson_Frame.paragraphs.length - 1)
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="overview-body-text mb-4">' + Lesson_Frame.paragraphs[p].contents.replace('\n', ' ') + '</p>\n';
+                      }
+                      else
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="overview-body-text mb-2">' + Lesson_Frame.paragraphs[p].contents.replace('\n', ' ') + '</p>\n';
+                      }
+                    }
+                    if (Lesson_Frame.paragraphs[p].appliedParagraphStyle.name == 'body_txt_bl' && bl == false)
+                    {
+                      bl = true;
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<ul class="overview-topic-list mb-4"><li>' + Lesson_Frame.paragraphs[p].contents + '</li>\n';
+                    }
+                    else if (Lesson_Frame.paragraphs[p].appliedParagraphStyle.name == 'body_txt_bl' && bl == true)
+                    {
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<li>' + Lesson_Frame.paragraphs[p].contents + '</li>\n';
+                    }
+                    if (p == Lesson_Frame.paragraphs.length - 1)
+                    {
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '</ul>\n';
+                    }
+                  }
+                }
+              }
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="overview-subheading mb-3">Independent Practice Resources</h3>\n';
+              var styleArray = ['caption_left']
+              var foundStyleText = findTextOffset(styleArray, 1);
+              if (foundStyleText.length > 0)
+              {
+                for (var c = 0; c < foundStyleText.length;  c++)
+                {
+                  if (foundStyleText[c].texts[0].fontStyle == 'SmBd' && foundStyleText[c].texts[0].parentTextFrames[0].geometricBounds[3] < 320 && foundStyleText[c].texts[0].parentTextFrames[0].label != 'Bottom')
+                  {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="unit-kb-week-goal mb-3">' + foundStyleText[c].texts[0].contents.replace('\n', ' ') + '</p>\n';
+                    var independent = findGroups('Independent', 1)
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="d-flex flex-column flex-sm-row align-items-start resource-gap-30">\n';
+                    for (var k1 = 0; k1 < independent.length; k1++)
+                    {
+                      if (independent[k1].groups.length > 0)
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="d-flex flex-column resource-card resource-card-double resource-card-double-wide">\n'
+                        if (independent[k1].allGraphics.length <= 2)
+                        {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="d-flex gap-2 resource-pair">\n';
+                        }
+                        else
+                        {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="d-flex gap-2 resource-pair resource-pair-wide">\n';
+                        }
+                        for (var r = 0; r < independent[k1].groups.length; r++)
+                        {
+                          var imageLoop = null
+                          if (independent[k1].groups[r].allGraphics.length > 0)
+                          {
+                            var imageLoop = independent[k1].groups[r];
+                            for (var s = 0; s < imageLoop.rectangles.length; s++)
+                            {
+                              if (imageLoop.rectangles[s].allGraphics.length)
+                              {
+                                var essentialImage = imageLoop.rectangles[s].allGraphics[0].exportAs('png', 'max', 300, lessonFolder + '/images/' + imageLoop.rectangles[s].allGraphics[0].itemLink.name.split('.')[0] + '.png');
+                                itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-book"><img class="img-fluid resource-image" src="./images/' + imageLoop.rectangles[s].allGraphics[0].itemLink.name.split('.')[0] + '.png"' + ' alt="' + independent[k1].textFrames[0].contents + '"></div>\n'
+                              }
+                            }
+                          }
+                        }
+                      }
+                      else
+                      {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="d-flex flex-column resource-card">\n'
+                          if (independent[k1].rectangles[0].allGraphics.length)
+                          {
+                            var essentialImage = independent[k1].rectangles[0].allGraphics[0].exportAs('png', 'max', 300, lessonFolder + '/images/' + independent[k1].rectangles[0].allGraphics[0].itemLink.name.split('.')[0] + '.png');
+                            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-book"><img class="img-fluid resource-image" src="./images/' + independent[k1].rectangles[0].allGraphics[0].itemLink.name.split('.')[0] + '.png"' + ' alt="' + independent[k1].textFrames[0].contents + '"></div>\n'
+                          }
+                      }
+                      if (independent[k1].groups.length > 0)
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '</div><h3 class="unit-resource-label">' + independent[k1].textFrames[0].contents.replace('\n', ' ') + '</h3>\n</article>\n'
+                      }
+                      else
+                      {
+                        itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="unit-resource-label">' + independent[k1].textFrames[0].contents.replace('\n', ' ') + '</h3>\n</article>\n'
+                      }
+                    }
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n';
+                  }
+                }
+              }
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<p class="unit-kb-week-goal mb-3">Adaptive Digital Games with Instant Data</p>\n<div class="row row-cols-1 row-cols-sm-2 row-cols-xl-4 resource-row-30 mb-5 adaptive-games-grid">\n';
+              var styleArray = ['caption_left']
+              var foundStyleText = findTextOffset(styleArray, 1);
+              if (foundStyleText.length > 0)
+              {
+                  var gameCap = []
+                  for (var c = 0; c < foundStyleText.length;  c++)
+                  {
+                  if (foundStyleText[c].parentTextFrames[0].geometricBounds[1] > 320 && foundStyleText[c].texts[0].fontStyle == 'Regular')
+                  {
+                      gameCap.push(foundStyleText[c].contents);
+                  }
+                  }
+              }
+                
+              if (gameCap.toString().indexOf('Encoding') != -1)
+              {
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="col d-flex flex-column resource-card">\n';
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-wide"><img class="img-fluid resource-image" src="./images/game-morphology.jpg" alt="Encoding (Phonics)"></div>\n'
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="unit-resource-label">Encoding (Phonics)</h3>\n</article>\n';
+              }
+              if (gameCap.toString().indexOf('Vocabulary') != -1 && gameCap.toString().indexOf('Encoding') != -1)
+              {
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="col d-flex flex-column resource-card">\n';
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-wide"><img class="img-fluid resource-image" src="./images/game-vocabulary.jpg" alt="Vocabulary"></div>'
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="unit-resource-label">Vocabulary</h3>\n</article>\n';
+              }
+              if (gameCap.toString().indexOf('Vocabulary') != -1 && gameCap.toString().indexOf('Encoding') == -1)
+              {
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="col d-flex flex-column resource-card">\n';
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-wide"><img class="img-fluid resource-image" src="./images/game-morphology.jpg" alt="Vocabulary"></div>\n'
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="unit-resource-label">Vocabulary</h3>\n</article>\n';
+              }
+              if (gameCap.toString().indexOf('Phonics') != -1 && gameCap.toString().indexOf('Encoding') == -1)
+              {
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="col d-flex flex-column resource-card">\n';
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-wide"><img class="img-fluid resource-image" src="./images/game-vocabulary.jpg" alt="Phonics"></div>\n'
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="unit-resource-label">Phonics</h3>\n</article>\n';
+              }
+              if (gameCap.toString().indexOf('Grammar') != -1)
+              {
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="col d-flex flex-column resource-card">\n';
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-wide"><img class="img-fluid resource-image" src="./images/game-grammar.jpg" alt="Grammar"></div>\n'
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="unit-resource-label">Grammar</h3>\n</article>\n';
+              }
+              if (gameCap.toString().indexOf('Morphology') != -1)
+              {
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="col d-flex flex-column resource-card">\n';
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-wide"><img class="img-fluid resource-image" src="./images/game-encoding.jpg" alt="Morphology"></div>\n'
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="unit-resource-label">Morphology</h3>\n</article>\n';
+              }
+              if (gameCap.toString().indexOf('High-Frequency Words') != -1)
+              {
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="col d-flex flex-column resource-card">\n';
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-wide"><img class="img-fluid resource-image" src="./images/game-encoding.jpg" alt="High-Frequency Words"></div>\n'
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="unit-resource-label">High-Frequency Words</h3>\n</article>\n';
+              }
+              itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n';
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="row resource-row-50 align-items-start">\n<div class="col-12 col-md-auto">\n<div class="d-flex flex-column flex-sm-row align-items-start resource-gap-50">\n'
+              try
+              {
+                var bottomCap = findFrame (doc.pages[1].textFrames, 'Bottom');
+                var bottomImg = findFrame (doc.pages[1].rectangles, 'Bottom');
+                if (bottomImg.length == bottomCap.length)
+                {
+                  for (var b = 0; b < bottomImg.length; b++)
+                  {
+                    var bottomImage = bottomImg[b].allGraphics[0].exportAs('png', 'max', 300, lessonFolder + '/images/' + bottomImg[b].allGraphics[0].itemLink.name.split('.')[0] + '.png');
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="d-flex flex-column resource-card">';
+                    itrsLessonHTMLFullContents.itrsCoreHTML += ' <div class="resource-frame resource-frame-book"><img class="img-fluid resource-image" src="./images/' + bottomImg[b].allGraphics[0].itemLink.name.split('.')[0] + '.png" alt="' + bottomCap[b].contents.replace('\n', ' ') + '"></div>\n';
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="unit-resource-label">' + bottomCap[b].contents.replace('\n', ' ') + '</h3>\n</article>'
+                  }
+                }
+                else
+                {
+                  for (var c = 0; c < bottomCap.length; c++)
+                  {
+                      var capBounds = bottomCap[c].geometricBounds;
+                      var matchedImages = [];
+
+                      for (var i = 0; i < bottomImg.length; i++)
+                      {
+                          var imgBounds = bottomImg[i].geometricBounds;
+
+                          // check horizontal overlap + vertical proximity
+                          if (
+                              Math.abs(imgBounds[0] - capBounds[2]) < 50 && // image just below caption
+                              !(imgBounds[3] < capBounds[1] || imgBounds[1] > capBounds[3]) // X overlap
+                          )
+                          {
+                              matchedImages.push(bottomImg[i]);
+                          }
+                      }
+
+                      // 🔥 Now one caption → multiple images
+                      if (matchedImages.length > 0)
+                      {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="d-flex flex-column resource-card">';
+                          if (matchedImages.length > 1)
+                          {
+                            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="d-flex gap-2 resource-pair">\n'
+                          }
+                          for (var m = 0; m < matchedImages.length; m++)
+                          {
+                              var img = matchedImages[m];
+                              var bottom_name = img.allGraphics[0].itemLink.name.split('.')[0];
+
+                              img.allGraphics[0].exportAs('png', 'max', 300, lessonFolder + '/images/' + bottom_name + '.png');
+
+                              itrsLessonHTMLFullContents.itrsCoreHTML += 
+                                  '<div class="resource-frame resource-frame-book">' +
+                                  '<img class="img-fluid resource-image" src="./images/' + bottom_name + '.png"></div>\n';
+                          }
+                          if (matchedImages.length > 1)
+                          {
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n<h3 class="unit-resource-label">' + bottomCap[c].contents.replace(/\n/g, ' ') + '</h3>\n</article>\n';
+                          }
+                          else
+                          {
+                            itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="unit-resource-label">' + bottomCap[c].contents.replace(/\n/g, ' ') + '</h3>\n</article>\n';
+                          }
+                      }
+                  }
+                }
+              } catch (e) {}
+              itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n</div>\n';
+
+              var styleArray = ['body-txt_bullets_stars']
+              var foundStyleText = findTextOffset(styleArray, 1);
+              if (foundStyleText.length > 0)
+              {
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="col-12 col-md">\n';
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<ul class="overview-topic-list unit-resource-list mt-0">\n';
+                for (var f = 0; f < foundStyleText.length; f++)
+                {
+                  for (var p = 0; p < foundStyleText[f].texts[0].paragraphs.length; p++)
+                  {
+                    var KnowledgeList = foundStyleText[f].texts[0].paragraphs[p];
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<li>' + KnowledgeList.contents.replace('\n', ' ') + '</li>\n';
+                  }
+                }
+                itrsLessonHTMLFullContents.itrsCoreHTML += '</ul>\n</div>\n</div>\n';
+              }
+              itrsLessonHTMLFullContents.itrsCoreHTML += '</section>\n'
+
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<section class="overview-section mb-5" aria-labelledby="resources-eld-heading">\n<div class="overview-section-heading mb-3">\n';
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<span class="overview-section-marker" aria-hidden="true"></span>\n<h2 id="resources-eld-heading" class="mb-0">Designated ELD</h2>\n</div>\n';
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="row resource-row-30 align-items-start mt-0">\n<div class="col-12 col-md-auto">\n<div class="d-flex flex-column flex-sm-row align-items-start resource-gap-30">\n';
+              var eldResources = findGroups('ELD', 0)
+              for (var k1 = 0; k1 < eldResources.length; k1++)
+              {
+                if (eldResources[k1].groups.length > 0)
+                {
+                  itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="d-flex flex-column resource-card resource-card-double resource-card-double-wide">\n'
+                  for (var r = 0; r < eldResources[k1].groups.length; r++)
+                  {
+                    var imageLoop = null
+                    if (eldResources[k1].groups[r].allGraphics.length > 0)
+                    {
+                      var imageLoop = eldResources[k1].groups[r];
+                      for (var s = 0; s < imageLoop.rectangles.length; s++)
+                      {
+                        if (imageLoop.rectangles[s].allGraphics.length)
+                        {
+                          var essentialImage = imageLoop.rectangles[s].allGraphics[0].exportAs('png', 'max', 300, lessonFolder + '/images/' + imageLoop.rectangles[s].allGraphics[0].itemLink.name.split('.')[0] + '.png');
+                          itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-wide resource-min-h-200"><img class="img-fluid resource-image" src="./images/' + imageLoop.rectangles[s].allGraphics[0].itemLink.name.split('.')[0] + '.png"' + ' alt="' + eldResources[k1].textFrames[0].contents + '"></div>\n'
+                        }
+                      }
+                    }
+                  }
+                }
+                else
+                {
+                    itrsLessonHTMLFullContents.itrsCoreHTML += '<article class="d-flex flex-column resource-card">\n'
+                    if (eldResources[k1].rectangles[0].allGraphics.length)
+                    {
+                      var essentialImage = eldResources[k1].rectangles[0].allGraphics[0].exportAs('png', 'max', 300, lessonFolder + '/images/' + eldResources[k1].rectangles[0].allGraphics[0].itemLink.name.split('.')[0] + '.png');
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="resource-frame resource-frame-book"><img class="img-fluid resource-image" src="./images/' + eldResources[k1].rectangles[0].allGraphics[0].itemLink.name.split('.')[0] + '.png"' + ' alt="' + eldResources[k1].textFrames[0].contents + '"></div>\n'
+                    }
+                }
+                if (eldResources[k1].groups.length > 0)
+                {
+                  itrsLessonHTMLFullContents.itrsCoreHTML += '</div><h3 class="unit-resource-label">' + eldResources[k1].textFrames[0].contents.replace('\n', ' ') + '</h3>\n</article>\n'
+                }
+                else
+                {
+                  itrsLessonHTMLFullContents.itrsCoreHTML += '<h3 class="unit-resource-label">' + eldResources[k1].textFrames[0].contents.replace('\n', ' ') + '</h3>\n</article>\n'
+                }
+              }
+              itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n</div>'
+              var styleArray = ['body-txt_bullets_stars']
+              var foundStyleText = findTextOffset(styleArray, 0);
+              if (foundStyleText.length > 0)
+              {
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="col-12 col-md">\n';
+                itrsLessonHTMLFullContents.itrsCoreHTML += '<ul class="overview-topic-list unit-resource-list mt-0">\n';
+                for (var f = 0; f < foundStyleText.length; f++)
+                {
+                  if (foundStyleText[f].parentTextFrames[0].geometricBounds[0] > 520)
+                  {
+                    for (var p = 0; p < foundStyleText[f].texts[0].paragraphs.length; p++)
+                    {
+                      var eldList = foundStyleText[f].texts[0].paragraphs[p];
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<li>' + eldList.contents.replace('\n', ' ') + '</li>\n';
+                    }
+                  }
+                }
+                itrsLessonHTMLFullContents.itrsCoreHTML += '</ul>\n</div>\n</div>\n';
+              }
+            } catch (e) 
+            {
+              finishedLog.open('a');
+              finishedLog.write('Issue in overview script ------- ' + doc.name);
+              finishedLog.close();
+            }
+
+            itrsLessonHTMLFullContents.itrsClosingHTML = '</section>\n</main>\n</div>\n <script src="/js/bootstrap.bundle.min.js"></script>\n  <script src="/js/script.js"></script>\n<script src="/js/trs-communication-channel.js"></script>\n<script>\n(function () {\n  function applyStrandColor() {\n    var body = document.body;\n    if (!body) return;\n\n    var className = body.className || \'\';\n    var strand = null;\n\n    // Determine strand from body class\n    if (className.indexOf(\'strand-reading\') !== -1) {\n      strand = \'reading\';\n    } else if (className.indexOf(\'strand-phonics\') !== -1) {\n      strand = \'phonics\';\n    } else if (className.indexOf(\'strand-writing\') !== -1) {\n      strand = \'writing\';\n    }\n\n    if (!strand) return;\n\n    // Build CSS variable reference\n    var cssVar = \'var(--color-\' + strand + \'-rgb)\';\n\n    // Apply to :root\n    document.documentElement.style.setProperty(\'--strand-rgb\', cssVar);\n  }\n\n  // Run on page load\n  if (document.readyState === \'loading\') {\n    document.addEventListener(\'DOMContentLoaded\', applyStrandColor);\n  } else {\n    applyStrandColor();\n  }\n})();\n</script>\n\n</body>\n\n</html>'
+            var htmlFolder = Folder(lessonFolder + '/html');
+            if (!htmlFolder.exists) htmlFolder.create();
+            var fileName = 'unit-overview-resources-at-a-glance' + '.html';
+            var itrsOutputFile = makeFile(htmlFolder.fsName + '/', fileName);
+
+            itrsOutputFile.open('w');
+            itrsOutputFile.write(
+                itrsLessonHTMLFullContents.itrsOpenerHTML +
+                itrsLessonHTMLFullContents.itrsCoreHTML + 
+                itrsLessonHTMLFullContents.itrsClosingHTML
+            )
+            itrsOutputFile.close();
+        }
+
+        // -------------------------------------------------- Resource at Glance Ends -------------------------------------------
+
+        // ---------------------------------------------------- Trade Books Starts ----------------------------------------------
+        else if (doc.name.match(/_U\d+_TradeBooks/) != null && doc.name.match(/_W\d+/) == null)
+        {
+            var unitName = 'Unit ' + fileMetaData.unit + ' Overview'
+
+            var itrsLessonHTMLFullContents = {};
+            itrsLessonHTMLFullContents.itrsOpenerHTML = '<!doctype html>\n<html lang="en">\n\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + unitName + ' Tabs</title>\n<link rel="stylesheet" href="/css/bootstrap-5-3-3.css">\n<link rel="stylesheet" href="/css/fonts.css">\n<link rel="stylesheet" href="/css/styles.css">\n<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">\n</head>\n<body><div class="bec-content">\n';
+            itrsLessonHTMLFullContents.itrsOpenerHTML += '<main class="container lesson-shell overview-page overview-tabs-page" aria-label=' +'"' + unitName  + '"' + '>\n';
+
+            itrsLessonHTMLFullContents.itrsCoreHTML = '<section class="overview-section mb-5" aria-labelledby="resources-trade-heading">\n'
+            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="overview-section-heading mb-3">\n<span class="overview-section-marker" aria-hidden="true"></span>\n<h2 id="resources-trade-heading" class="mb-0">Trade Book Recommendations</h2></div>\n'
+            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="row g-4 align-items-start mb-5">\n<div class="col-12 col-lg-9">\n<div class="overview-intro-copy unit-trade-summary mb-0">'
+            var styleArray = ['body_txt']
+            var foundStyleText = findTextOffset(styleArray, 0);
+            if (foundStyleText != null)
+            {
+              if (foundStyleText[0].texts[0].textFrames.length > 0)
+              {
+                var insertion_Point = foundStyleText[0].texts[0].textFrames[0].parent;
+                var linkText = foundStyleText[0].texts[0].textFrames[0].contents.replace(foundStyleText[0].texts[0].textFrames[0].characters[0].contents, '');
+                var linkText_contents = '<a class="unit-trade-link" href="#" aria-label="Read-Aloud Routine"><span class="material-icons unit-trade-link-icon" aria-hidden="true">open_in_new</span>' + linkText + '</a>';
+              }
+              itrsLessonHTMLFullContents.itrsCoreHTML += 
+              '<p class="overview-body-text mb-0">' + convertTextToHTML(foundStyleText[0].texts[0]).replace(/\.$/, linkText_contents + '.') + '</p>\n'; 
+            }
+            itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n</div>\n';
+            if (app.activeDocument.pages[0].allGraphics.length > 0)
+            {
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="col-12 col-lg-3">\n<article class="d-flex align-items-start gap-3 unit-trade-callout">';
+              var TBImage = app.activeDocument.pages[0].allGraphics[0];
+              var TBTaskImage = TBImage.parent.exportAs('png', 'max', 300, lessonFolder + '/images/recommended-trade-book' + '.png');
+              itrsLessonHTMLFullContents.itrsCoreHTML += '<img class="unit-trade-book-image" src="./images/recommended-trade-book.png" alt="Recommended trade book cover"></img>';
+              var styleArray = ['TBR_caption']
+              var foundStyleText = findTextOffset(styleArray, 0);
+              if (foundStyleText != null)
+              {
+                itrsLessonHTMLFullContents.itrsCoreHTML += 
+                '<p class="unit-kb-week-goal mb-0 text-center">' + convertTextToHTML(foundStyleText[0].texts[0]) + '</p>\n </article>\n</div>'; 
+              }
+            }
+            var styleArray = ['b-hd']
+            var foundStyleText = findText(styleArray);
+            if (foundStyleText.length > 0)
+            {
+              itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n<p class="unit-kb-week-goal mb-3">' + convertTextToHTML(foundStyleText[0].texts[0]) + '</p>\n';
+            }
+            itrsLessonHTMLFullContents.itrsCoreHTML += '<div class="table-responsive-xl overview-table-wrap">\n<table class="table table-bordered align-middle overview-table unit-resource-table">\n';
+            var firstTable = foundStyleText[0].texts[0].parent.parent
+
+            for (var r = 1; r < firstTable.rows.length; r++)
+            {
+              var ck_table = firstTable.rows[r];
+              for (var t = 0; t < ck_table.cells.length; t++)
+              {
+                var col_span = firstTable.columns.length
+                if (ck_table.cells[t].texts[0].contents.length > 0)
+                {
+                  if (ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'rtb_table_hed')
+                  {
+                    if (t == 0 || ck_table.cells.length == 1)
+                    {
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<thead>\n<tr>\n'
+                    }
+                    if (ck_table.cells[t].texts[0].contents.length > 0 && t < ck_table.cells.length - 1)
+                    {
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<th scope="col" colspan="' + col_span + '">' + convertTextToHTML(ck_table.cells[t].texts[0]) + '</th>';
+                    }
+                    if (t == ck_table.cells.length - 1)
+                    {
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<th scope="col" colspan="' + col_span + '">' + convertTextToHTML(ck_table.cells[t].texts[0]) + '</th>';
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '</tr>\n</thead>';
+                    }
+                  }
+                  else if (ck_table.cells[t].texts[0].paragraphs[0].appliedParagraphStyle.name == 'resources_body_txt')
+                  {
+                    if (t == 0)
+                    {
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<tr>\n'
+                    }
+                    if (ck_table.cells[t].texts[0].contents.length > 0 && t < ck_table.cells.length - 1)
+                    {
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<td colspan="' + col_span + '">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td>\n';
+                    }
+                    else if (ck_table.cells[t].texts[0].contents.length > 0 && t == ck_table.cells.length - 1)
+                    {
+                      itrsLessonHTMLFullContents.itrsCoreHTML += '<td colspan="' + col_span + '">' + convertCellToHTML(ck_table.cells[t].texts[0]) + '</td></tr>\n';
+                    }
+                  }
+                }
+              }
+            }
+              itrsLessonHTMLFullContents.itrsCoreHTML += '</tbody></table>\n</div>'
+          // itrsLessonHTMLFullContents.itrsCoreHTML += '</div>\n'
+          // '</section>\n'
+
+            itrsLessonHTMLFullContents.itrsClosingHTML = '</section>\n</main>\n</div>\n <script src="/js/bootstrap.bundle.min.js"></script>\n  <script src="/js/script.js"></script>\n<script src="/js/trs-communication-channel.js"></script>\n<script>\n(function () {\n  function applyStrandColor() {\n    var body = document.body;\n    if (!body) return;\n\n    var className = body.className || \'\';\n    var strand = null;\n\n    // Determine strand from body class\n    if (className.indexOf(\'strand-reading\') !== -1) {\n      strand = \'reading\';\n    } else if (className.indexOf(\'strand-phonics\') !== -1) {\n      strand = \'phonics\';\n    } else if (className.indexOf(\'strand-writing\') !== -1) {\n      strand = \'writing\';\n    }\n\n    if (!strand) return;\n\n    // Build CSS variable reference\n    var cssVar = \'var(--color-\' + strand + \'-rgb)\';\n\n    // Apply to :root\n    document.documentElement.style.setProperty(\'--strand-rgb\', cssVar);\n  }\n\n  // Run on page load\n  if (document.readyState === \'loading\') {\n    document.addEventListener(\'DOMContentLoaded\', applyStrandColor);\n  } else {\n    applyStrandColor();\n  }\n})();\n</script>\n\n</body>\n\n</html>'
+            var htmlFolder = Folder(lessonFolder + '/html');
+            if (!htmlFolder.exists) htmlFolder.create();
+            // var fileName = unitName + '_' + doc.name.replace(/^.*_U\d+_/, '').replace('.indd', '') + '.html';
+            var fileName = 'unit-overview-trade-book-recommendations' + '.html';
+            var itrsOutputFile = makeFile(htmlFolder.fsName + '/', fileName);
+
+            itrsOutputFile.open('w');
+            itrsOutputFile.write(
+                itrsLessonHTMLFullContents.itrsOpenerHTML +
+                itrsLessonHTMLFullContents.itrsCoreHTML + 
+                itrsLessonHTMLFullContents.itrsClosingHTML
+            )
+            itrsOutputFile.close();
+        }
+        // ---------------------------------------------------- Trade Books Ends ----------------------------------------------
+
+        app.activeDocument.close(SaveOptions.NO);
+
+        time = new Date();
+        finishedLog.open('a');
+        finishedLog.write('[' + time + '] ' + file + ' closed.\n--------------------------------------------------------------------\n');
+        finishedLog.close();
+    }
+}
+
+function convertTextToHTML(txt)
+{
+    var html = "";
+    for (var x = 0; x < txt.paragraphs.length; x++)
+    {
+
+      var ranges = txt.paragraphs[x].textStyleRanges;
+
+      for (var r = 0; r < ranges.length; r++)
+      {
+        if (ranges.length == 1)
+        {
+          try
+          {
+            var content = ranges[r].contents.match(txt.paragraphs[x].contents);
+            if (content == null)
+            {
+              if (ranges[r].contents == txt.paragraphs[x].contents)
+              {
+                var content = txt.paragraphs[x].contents
+              }
+              else
+              {
+                var content = ranges[r].contents
+              }
+            }
+          }
+          catch (e)
+          {
+            if (content == null)
+            {
+              if (ranges[r].contents == txt.paragraphs[x].contents)
+              {
+                var content = txt.paragraphs[x].contents
+              }
+              else
+              {
+                var content = ranges[r].contents
+              }
+            }
+          }
+        }
+        else if (r < ranges.length - 1)
+        {
+          var content = ranges[r].contents
+        }
+        else if (r == ranges.length - 1)
+        {
+          var c_index = txt.paragraphs[x].parent.characters.itemByRange(ranges[r].characters[0].index, txt.paragraphs[x].characters[-1].index)
+          var content = ranges[r].contents.match(c_index.contents);
+          if (content == null)
+          {
+            if (ranges[r].contents.toString() == c_index.contents.toString())
+            {
+              var content = c_index.contents
+            }
+            else
+            {
+              var content = c_index.contents
+            }
+          }
+        }
+        if (ranges[r].fontStyle.toLowerCase().match(/Bold italic/))
+        {
+          html += "<strong><em>" + content + "</em></strong>";
+        }
+        else if (ranges[r].fontStyle.toLowerCase().match(/italic/))
+        {
+            html += "<em>" + content + "</em>";
+        }
+        else if (ranges[r].fontStyle.toLowerCase().match(/bold/))
+        {
+          html += "<strong>" + content + "</strong>";
+        }
+        else
+        {
+            html += content;
+        }
+      }
+    }
+
+    return html;
+}
+
+
+function convertCellToHTML(txt)
+{
+    var html = "";
+    for (var x = 0; x < txt.paragraphs.length; x++)
+    {
+      var ranges = txt.paragraphs[x].textStyleRanges;
+      try
+      {
+        if (ranges.everyItem().fontStyle.toString().match(/^([^,]+)(?:,\1)*$/) != null)
+        {
+          if (ranges[0].fontStyle != 'Regular')
+          {
+            if (ranges[0].fontStyle.toLowerCase().match(/bold italic/))
+            {
+                html += "<strong><em>" + txt.paragraphs[x].contents + "</em></strong>";
+            }
+            else if (ranges[0].fontStyle.toLowerCase().match(/italic/))
+            {
+                html += "<em>" + txt.paragraphs[x].contents + "</em>";
+            }
+            else if (ranges[0].fontStyle.toLowerCase().match(/bold/))
+            {
+              html += "<strong>" + txt.paragraphs[x].contents + "</strong>";
+            }
+            else
+            {
+                html += content;
+            }
+            html = '<p style="margin-bottom:0;">' + html + '</p>'
+            if (x == txt.paragraphs.length - 1)
+            {
+              return html
+            }
+            else{
+              continue;
+            }
+          }
+        }
+      } catch (e) {}
+      for (var r = 0; r < ranges.length; r++)
+      {
+        if (ranges.length == 1)
+        {
+          try
+          {
+            var content = ranges[r].contents.match(txt.paragraphs[x].contents);
+            if (content == null)
+            {
+              if (ranges[r].paragraphs[0].contents.toString() == txt.paragraphs[x].contents.toString())
+              {
+                var content = '<p style="margin-bottom:0;">' + txt.paragraphs[x].contents + '</p>';
+              }
+              else
+              {
+                var content = '<p style="margin-bottom:0;">' + ranges[r].paragraphs[0].contents + '</p>'
+              }
+            }
+            else
+            {
+              content = '<p style="margin-bottom:0;">' + ranges[r].contents.match(txt.paragraphs[x].contents) + '</p>';
+            }
+          }
+          catch (e)
+          {
+            if (content == null)
+            {
+              if (ranges[r].paragraphs[0].contents.toString() == txt.paragraphs[x].contents.toString())
+              {
+                var content = '<p style="margin-bottom:0;">' + txt.paragraphs[x].contents + '</p>'
+              }
+              else
+              {
+                var content = '<p style="margin-bottom:0;">' + ranges[r].contents + '</p>'
+              }
+            }
+          }
+        }
+        else if (r < ranges.length - 1)
+        {
+          var content = '<p style="margin-bottom:0;">' + ranges[r].contents
+        }
+        // else if (ranges.everyItem().fontStyle.toString() == ranges.everyItem().fontStyle.toString())
+        // {
+        //   var content = txt.paragraphs[x].contents.replace('\n','')
+        //   r = ranges.length - 1
+        // }
+        else if (r == ranges.length - 1)
+        {
+          var c_index = txt.paragraphs[x].parent.characters.itemByRange(ranges[r].characters[0].index, txt.paragraphs[x].characters[-1].index)
+          var content = ranges[r].contents.match(c_index.contents) + '</p>';
+          if (content == null)
+          {
+            if (ranges[r].paragraphs[0].contents.toString() == c_index.contents.toString())
+            {
+              var content = c_index.contents + '</p>'
+            }
+            else
+            {
+              var content = c_index.contents + '</p>'
+            }
+          }
+        }
+        if (ranges[r].fontStyle.toLowerCase().match(/Bold italic/))
+        {
+          html += "<strong><em>" + content + "</em></strong>";
+        }
+        else if (ranges[r].fontStyle.toLowerCase().match(/italic/))
+        {
+            html += "<em>" + content + "</em>";
+        }
+        else if (ranges[r].fontStyle.toLowerCase().match(/bold/))
+        {
+          html += "<strong>" + content + "</strong>";
+        }
+        else
+        {
+            html += content;
+        }
+      }
+    }
+    html = html.replace(/<\/strong><strong>/g, '').replace(/<\/em><em>/g, '').replace(/<strong><p>/g, '<p><strong>').replace(/<\/p><\/strong>/g, '<\/strong><\/p>').replace(/<em><p>/g, '<p><em>').replace(/<\/p><\/em>/g, '<\/em><\/p>')
+    return html;
+}
+
+
+function findImage (lessonFolder)
+{
+    var foundImages = [];
+    var exportedImages = []
+    var allImages = app.activeDocument.pages[0].allGraphics
+    for (i = 0; i < allImages.length; i++)
+    {
+        if (allImages[i].itemLink.name.match(/G._U\d+_CV/i) != null)
+        {
+            foundImages.push(allImages[i]);
+        }
+    }
+    foundImages.sort(function(a, b)
+    {
+        return a.geometricBounds[0] - b.geometricBounds[0];
+    });
+    for (var c = 0; c < foundImages.length; c++)
+    {
+        var imageName = 'grade' + foundImages[c].itemLink.name.split('_G')[1].split('_')[0].toLowerCase()
+        var myImages = foundImages[c].exportAs('png', 'max', 300, lessonFolder + '/images/' + imageName + '.png')
+        exportedImages.push(myImages)
+    }
+
+    return foundImages
+}
+
+function betterAlert(msg) {
+    var input = prompt(msg, 'continue');
+
+    input === 'exit' ? exit() : false;
+}
+
+  function buildITRSNav(obj) {
+    var k;
+    for (k in obj) {
+      if (!obj.hasOwnProperty(k)) continue;
+      $.writeln(k);
+    }
+    return null;
+  }
+
+function findText(style)
+{
+    var foundItem = []
+    for (var t = 0; t < style.length; t++)
+    {
+        app.findGrepPreferences = app.changeGrepPreferences = null;
+        app.findChangeGrepOptions.includeMasterPages = false;
+        app.findChangeGrepOptions.includeLockedStoriesForFind = true;
+        app.findChangeGrepOptions.includeLockedLayersForFind = true;
+        app.findGrepPreferences.appliedParagraphStyle = app.activeDocument.paragraphStyles.itemByName(style[t])
+        var found = app.activeDocument.findGrep();
+        if (found.length > 0)
+        {
+            for (var f = 0; f < found.length; f++)
+            {
+                var foundText = found[f];
+                foundItem.push(foundText)
+            }
+            foundItem.sort(function(a, b)
+            {
+                return a.insertionPoints[0].baseline - b.insertionPoints[0].baseline;
+            });
+        }
+    }
+    if (foundItem.length > 0)
+    {
+        return foundItem
+    }
+}
+
+function findGroups (mylabel, page)
+{
+    var group_frame = []
+    for (var g = 0; g < doc.pages[page].groups.length; g++)
+    {
+        if (doc.pages[page].groups[g].label == mylabel)
+        {
+            group_frame.push(doc.pages[page].groups[g])
+        }
+    }
+    group_frame.sort(function(a, b)
+    {
+        var aBounds = a.geometricBounds;
+        var bBounds = b.geometricBounds;
+
+        var aTop = aBounds[0];
+        var bTop = bBounds[0];
+
+        var aLeft = aBounds[1];
+        var bLeft = bBounds[1];
+
+        var rowTolerance = 20; 
+
+        if (Math.abs(aTop - bTop) < rowTolerance)
+        {
+            return aLeft - bLeft; 
+        }
+        else
+        {
+            return aTop - bTop; 
+        }
+    });
+
+    return group_frame;
+}
+
+function findFrame (arg, mylabel)
+{
+    var myFrame = []
+    for (var g = 0; g < arg.length; g++)
+    {
+        if (arg[g].label == mylabel)
+        {
+            myFrame.push(arg[g])
+        }
+    }
+
+    myFrame.sort(function(a, b)
+    {
+        var aBounds = a.geometricBounds;
+        var bBounds = b.geometricBounds;
+
+        var aTop = aBounds[0];
+        var bTop = bBounds[0];
+
+        var aLeft = aBounds[1];
+        var bLeft = bBounds[1];
+
+        var rowTolerance = 20; 
+
+        if (Math.abs(aTop - bTop) < rowTolerance)
+        {
+            return aLeft - bLeft; 
+        }
+        else
+        {
+            return aTop - bTop; 
+        }
+    });
+
+    return myFrame;
+}
+
+function findTextOffset(style, offset) 
+{
+    var foundItem = []
+    for (var t = 0; t < style.length; t++)
+    {
+      if (app.activeDocument.paragraphStyles.itemByName(style[t]).isValid)
+      {
+        app.findGrepPreferences = app.changeGrepPreferences = null;
+        app.findChangeGrepOptions.includeMasterPages = false;
+        app.findChangeGrepOptions.includeLockedStoriesForFind = true;
+        app.findChangeGrepOptions.includeLockedLayersForFind = true;
+        app.findGrepPreferences.appliedParagraphStyle = app.activeDocument.paragraphStyles.itemByName(style[t])
+        var found = app.activeDocument.findGrep();
+        if (found.length > 0)
+        {
+            for (var f = 0; f < found.length; f++)
+            {
+              if (findPage(found[f].texts[0]) == null)
+              {
+                continue;
+              }
+              if (findPage(found[f].texts[0]).documentOffset == offset)
+              {
+                var foundText = found[f];
+                foundItem.push(foundText)
+              }
+            }
+            foundItem.sort(function(a, b)
+            {
+                return a.insertionPoints[0].baseline - b.insertionPoints[0].baseline;
+            });
+        }
+      }
+    }
+    if (foundItem.length > 0)
+    {
+        return foundItem
+    }
+}
+
+function findPage(theObj) {
+    if (theObj.hasOwnProperty("baseline")) {
+        theObj = theObj.parentTextFrames[0];
+    }
+    while (theObj != null) {
+        if (theObj.hasOwnProperty("parentPage")) return theObj.parentPage;
+        var whatIsIt = theObj.constructor.name;
+        switch (whatIsIt) {
+            case 'Page' : return theObj;
+            case 'Character' : theObj = theObj.parentTextFrames[0]; break;
+            case 'Cell' : theObj = theObj.insertionPoints[0].parentTextFrames[0]; break;
+            case 'Note' : ; 
+              case 'Footnote' : theObj = theObj.storyOffset; break;
+            case 'Application' : return null;
+        }
+        if (theObj == null) return null;
+        theObj = theObj.parent;
+    }
+    return theObj
+}
